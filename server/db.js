@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS teams (
   name TEXT NOT NULL,
   country TEXT,
   logo TEXT,
+  history_synced_at TEXT,
   updated_at TEXT NOT NULL
 );
 
@@ -218,6 +219,12 @@ export function getDb() {
   // Migração leve para bancos criados antes da coluna de estatísticas de cache.
   try {
     handle.exec('ALTER TABLE api_cache ADD COLUMN hits INTEGER NOT NULL DEFAULT 0');
+  } catch {
+    /* coluna já existe */
+  }
+  // Migração: data do último histórico sincronizado por equipe.
+  try {
+    handle.exec('ALTER TABLE teams ADD COLUMN history_synced_at TEXT');
   } catch {
     /* coluna já existe */
   }

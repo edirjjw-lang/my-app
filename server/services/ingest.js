@@ -466,6 +466,7 @@ export async function syncTeamHistory(teamProviderId, { last = 10, force = false
     }
   }
 
+  run('UPDATE teams SET history_synced_at = ? WHERE provider_id = ?', [nowIso(), teamProviderId]);
   run(
     `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
