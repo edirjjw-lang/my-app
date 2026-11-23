@@ -1,4 +1,5 @@
 import { config } from '../config.js';
+import { get } from '../db.js';
 import { ProviderError, collectPages, providerRequest } from './http.js';
 
 /**
@@ -168,6 +169,19 @@ export function normalizeStatistics(payload) {
 
 const leagueNames = new Map();
 let leaguesLoadedAt = 0;
+
+/** Ids reais das equipes do jogo, lidos do banco (a API devolve home/away). */
+function fixtureTeamIds(fixtureId) {
+  const row = get(
+    `SELECT h.provider_id AS home_pid, a.provider_id AS away_pid
+       FROM fixtures f
+       JOIN teams h ON h.id = f.home_team_id
+       JOIN teams a ON a.id = f.away_team_id
+      WHERE f.provider_id = ?`,
+    [String(fixtureId)],
+  );
+  return row ? { homeId: row.home_pid, awayId: row.away_pid } : {};
+}
 
 /**
  * Nomes das competições. Os eventos trazem apenas `league_id`, então o mapa é
@@ -382,11 +396,12 @@ export const bzzoiroProvider = {
       ttlMs: CACHE_TTL.statistics,
     });
     // A API devolve { event_id, stats: { home: {...}, away: {...} } }.
-    // As chaves são trocadas pelos ids reais das equipes quando conhecidos.
+    // As chaves são trocadas pelos ids reais das equipes (lidos do banco).
     const raw = normalizeStatistics(payload?.stats ?? payload);
+    const ids = { ...fixtureTeamIds(fixtureId), ...teams };
     const statsByTeam = {};
-    if (raw.home && teams.homeId) statsByTeam[String(teams.homeId)] = raw.home;
-    if (raw.away && teams.awayId) statsByTeam[String(teams.awayId)] = raw.away;
+    if (raw.home && ids.homeId) statsByTeam[String(ids.homeId)] = raw.home;
+    if (raw.away && ids.awayId) statsByTeam[String(ids.awayId)] = raw.away;
     if (!Object.keys(statsByTeam).length) {
       if (raw.home) statsByTeam.home = raw.home;
       if (raw.away) statsByTeam.away = raw.away;
