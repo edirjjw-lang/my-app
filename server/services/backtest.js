@@ -17,7 +17,7 @@ function loadFinishedFixtures(from, to, limit) {
     `SELECT * FROM fixtures
       WHERE status = 'FINISHED' AND kickoff_utc >= ? AND kickoff_utc <= ?
         AND home_goals IS NOT NULL AND away_goals IS NOT NULL
-      ORDER BY kickoff_utc ASC
+      ORDER BY kickoff_utc DESC
       LIMIT ?`,
     [from, to, limit],
   );
