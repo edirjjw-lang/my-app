@@ -4,7 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { collectPages, pagingInfo } from '../server/provider/http.js';
+// Ambiente isolado ANTES de carregar módulos do servidor (config lê env no import).
+const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'futebolpro-pagination-'));
+process.env.DB_PATH = path.join(TMP, 'test.db');
+process.env.FOOTBALL_API_KEY = 'chave-de-teste-nao-real';
+process.env.API_MAX_PAGES = '60';
+
+const { collectPages, pagingInfo } = await import('../server/provider/http.js');
 
 function fixtureResponse(items, { current = 1, total = 1 } = {}) {
   return { payload: { paging: { current, total }, response: items }, items };
@@ -49,7 +55,7 @@ test('collectPages mantém as páginas já lidas quando uma página posterior fa
   assert.match(result.error, /página 3/);
 });
 
-test('collectPages sinaliza quando o teto de páginas impede a coleta completa', async () => {
+test('collectPages sinaliza quando o teto de páginas impéde a coleta completa', async () => {
   const result = await collectPages(
     async (page) => fixtureResponse([{ id: page }], { current: page, total: 10 }),
     { maxPages: 3 },
@@ -74,11 +80,6 @@ function rawFixture(id, leagueId, leagueName, kickoffUtc) {
 }
 
 test('provedor API-Football coleta todas as páginas de todas as ligas sem filtrar campeonato', async () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'futebolpro-pagination-'));
-  process.env.DB_PATH = path.join(tmp, 'test.db');
-  process.env.FOOTBALL_API_KEY = 'chave-de-teste-nao-real';
-  process.env.API_MAX_PAGES = '60';
-
   const pages = [
     [rawFixture(1, 71, 'Serie A', '2026-11-23T18:00:00+00:00'), rawFixture(2, 128, 'Liga Profesional', '2026-11-23T20:00:00+00:00')],
     [rawFixture(3, 140, 'La Liga', '2026-11-23T21:00:00+00:00'), rawFixture(4, 39, 'Premier League', '2026-11-23T22:00:00+00:00')],
@@ -100,7 +101,7 @@ test('provedor API-Football coleta todas as páginas de todas as ligas sem filtr
     const { apiFootballProvider } = await import('../server/provider/apiFootball.js');
     const result = await apiFootballProvider.fetchLiveFixtures();
 
-    assert.deepEqual(requestedPages, [1, 2, 3], 'o provedor leu todas as páginas');
+    assert.deepEqual(requestedPages, [1, 2, 3], 'o provedor leo todas as páginas');
     assert.equal(result.fixtures.length, 6, 'os 6 jogos das 3 páginas foram mantidos');
     assert.equal(result.leagues, 6, 'todas as 6 ligas distintas foram preservadas');
     assert.equal(result.pages, 3);
@@ -109,6 +110,6 @@ test('provedor API-Football coleta todas as páginas de todas as ligas sem filtr
     assert.equal(competitionIds.size, 6, 'nenhuma liga foi descartada por filtro');
   } finally {
     globalThis.fetch = originalFetch;
-    fs.rmSync(tmp, { recursive: true, force: true });
+    fs.rmSync(TMP, { recursive: true, force: true });
   }
 });
