@@ -77,6 +77,9 @@ export function normalizeMatch(match) {
 export const footballDataProvider = {
   id: 'football-data',
   label: 'football-data.org (v4)',
+  get configured() {
+    return Boolean(config.apiKey && config.apiKey.length >= 8);
+  },
   capabilities: {
     statistics: false,
     odds: false,

@@ -303,6 +303,10 @@ export function normalizeInjuries(responseItems) {
 export const apiFootballProvider = {
   id: 'api-football',
   label: 'API-Football (v3)',
+  // Reflete a configuração real da chave (lida apenas no backend).
+  get configured() {
+    return Boolean(config.apiKey && config.apiKey.length >= 8);
+  },
   capabilities: {
     statistics: true,
     odds: true,
