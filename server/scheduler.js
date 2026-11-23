@@ -108,6 +108,9 @@ async function scheduledCycle() {
 
 const BACKTEST_MIN_FINISHED = 20;
 const BACKTEST_INTERVAL_MS = 6 * 60 * 60 * 1000;
+// Rodada sem nenhuma partida avaliada não é resultado válido: tenta de novo
+// logo em vez de deixar o painel de validação vazio por 6 horas.
+const BACKTEST_RETRY_MS = 10 * 60 * 1000;
 
 /**
  * Valida o modelo contra partidas já encerradas (backtest cronológico: cada
@@ -122,8 +125,12 @@ async function modelValidationCycle() {
     )?.n ?? 0;
   if (finished < BACKTEST_MIN_FINISHED) return;
 
-  const last = get('SELECT created_at FROM backtest_runs ORDER BY id DESC LIMIT 1');
-  if (last?.created_at && Date.now() - Date.parse(last.created_at) < BACKTEST_INTERVAL_MS) return;
+  const last = get('SELECT created_at, fixtures_evaluated FROM backtest_runs ORDER BY id DESC LIMIT 1');
+  if (last?.created_at) {
+    const age = Date.now() - Date.parse(last.created_at);
+    const emptyRun = Number(last.fixtures_evaluated ?? 0) === 0;
+    if (age < (emptyRun ? BACKTEST_RETRY_MS : BACKTEST_INTERVAL_MS)) return;
+  }
 
   const result = await guard('backtest', () => runBacktest({ maxFixtures: 150 }));
   schedulerState.lastBacktestAt = nowIso();

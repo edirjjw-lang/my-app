@@ -7,6 +7,21 @@ import { buildTeamProfileFromRows } from '../analysis/profile.js';
 import { computeBaseline, computeH2H, parseStoredJson } from './analysis.js';
 
 const MAX_FIXTURES_PER_RUN = 200;
+// Base mínima por equipe: 5 é o ideal, mas exigir 5 sempre fazia o backtest
+// descartar TODAS as partidas e o painel de validação ficar vazio. Com 3 jogos
+// anteriores o perfil já é calculável e o próprio motor sinaliza a qualidade.
+const MIN_HISTORY = 3;
+
+function loadFinishedFixtures(from, to, limit) {
+  return all(
+    `SELECT * FROM fixtures
+      WHERE status = 'FINISHED' AND kickoff_utc >= ? AND kickoff_utc <= ?
+        AND home_goals IS NOT NULL AND away_goals IS NOT NULL
+      ORDER BY kickoff_utc ASC
+      LIMIT ?`,
+    [from, to, limit],
+  );
+}
 
 function metricsFromPredictions(predictions) {
   const valid = predictions.filter((p) => Number.isFinite(p.probability) && (p.outcome === 0 || p.outcome === 1));
@@ -40,14 +55,15 @@ export function runBacktest({ fromDate, toDate, maxFixtures = 120 } = {}) {
   const from = fromDate ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const to = toDate ?? nowIso();
 
-  const fixtures = all(
-    `SELECT * FROM fixtures
-      WHERE status = 'FINISHED' AND kickoff_utc >= ? AND kickoff_utc <= ?
-        AND home_goals IS NOT NULL AND away_goals IS NOT NULL
-      ORDER BY kickoff_utc ASC
-      LIMIT ?`,
-    [from, to, Math.min(Number(maxFixtures) || 120, MAX_FIXTURES_PER_RUN)],
-  );
+  const limit = Math.min(Number(maxFixtures) || 120, MAX_FIXTURES_PER_RUN);
+  let fixtures = loadFinishedFixtures(from, to, limit);
+  let effectiveFrom = from;
+  // Sem partidas na janela pedida, amplia para trás em vez de devolver um
+  // painel vazio: os dados encerrados que a fonte entrega podem ser mais antigos.
+  if (!fixtures.length && !fromDate) {
+    effectiveFrom = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+    fixtures = loadFinishedFixtures(effectiveFrom, to, limit);
+  }
 
   if (!fixtures.length) {
     return {
@@ -75,19 +91,22 @@ export function runBacktest({ fromDate, toDate, maxFixtures = 120 } = {}) {
   const predictions = [];
   let evaluated = 0;
   let skipped = 0;
+  const skipReasons = { history: 0, baseline: 0, blocked: 0 };
 
   for (const fixture of fixtures) {
     const before = fixture.kickoff_utc;
     const homeRows = (byTeam.get(fixture.home_team_id) ?? []).filter((row) => row.kickoff_utc < before);
     const awayRows = (byTeam.get(fixture.away_team_id) ?? []).filter((row) => row.kickoff_utc < before);
-    if (homeRows.length < 5 || awayRows.length < 5) {
+    if (homeRows.length < MIN_HISTORY || awayRows.length < MIN_HISTORY) {
       skipped += 1;
+      skipReasons.history += 1;
       continue;
     }
 
     const baseline = computeBaseline(fixture.competition_id, before);
     if (!baseline) {
       skipped += 1;
+      skipReasons.baseline += 1;
       continue;
     }
 
@@ -111,6 +130,7 @@ export function runBacktest({ fromDate, toDate, maxFixtures = 120 } = {}) {
 
     if (analysis.blocked) {
       skipped += 1;
+      skipReasons.blocked += 1;
       continue;
     }
 
@@ -209,10 +229,11 @@ export function runBacktest({ fromDate, toDate, maxFixtures = 120 } = {}) {
 
   return {
     runId,
-    from,
+    from: effectiveFrom,
     to,
     fixturesEvaluated: evaluated,
     fixturesSkipped: skipped,
+    skipReasons,
     totals,
     recommendedTotals,
     perMarket,
