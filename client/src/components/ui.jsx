@@ -9,6 +9,55 @@ export function Chip({ tone = '', children, dot = false }) {
   );
 }
 
+const BADGE_PALETTES = [
+  ['#00e58a', '#046b43'],
+  ['#4aa8ff', '#1a4b96'],
+  ['#ffb648', '#a25f04'],
+  ['#ff5d73', '#8a1730'],
+  ['#a78bfa', '#4b2a94'],
+  ['#2dd4bf', '#0b6b60'],
+  ['#f472b6', '#8c1a5c'],
+  ['#8fd3ff', '#215f96'],
+];
+
+const NAME_SKIP = new Set(['de', 'da', 'do', 'dos', 'das', 'del', 'la', 'el', 'y', 'e', 'of', 'the']);
+
+/** Iniciais do time para o escudo (ex.: "América de Cali" → AC). */
+export function teamInitials(name) {
+  const words = String(name ?? '')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter((word) => word && !NAME_SKIP.has(word.toLowerCase()));
+  if (!words.length) return '?';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return `${words[0][0]}${words[words.length - 1][0]}`.toUpperCase();
+}
+
+function paletteFor(name) {
+  const text = String(name ?? '');
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 1) hash = (hash * 31 + text.charCodeAt(index)) % 100000;
+  return BADGE_PALETTES[hash % BADGE_PALETTES.length];
+}
+
+/** Escudo do time: usa o logo real quando a fonte fornece, senão as iniciais. */
+export function TeamBadge({ name, logo, size = 'md' }) {
+  const [from, to] = paletteFor(name);
+  const style = { '--badge-from': from, '--badge-to': to };
+  if (logo) {
+    return (
+      <span className={`team-badge ${size}`} style={style}>
+        <img src={logo} alt="" loading="lazy" />
+      </span>
+    );
+  }
+  return (
+    <span className={`team-badge ${size}`} style={style} aria-hidden="true">
+      {teamInitials(name)}
+    </span>
+  );
+}
+
 const LIVE_STATUSES = new Set(['LIVE', 'HT']);
 
 export function StatusChip({ status, minute }) {
@@ -105,7 +154,8 @@ export function StatCompare({ label, home, away, suffix = '' }) {
         <b>{hasAway ? `${away}${suffix}` : '—'}</b>
       </div>
       <div className="duo-bar">
-        <span style={{ width: `${homeShare}%` }} />
+        <span className="home" style={{ width: `${homeShare}%` }} />
+        <span className="away" style={{ width: `${100 - homeShare}%` }} />
       </div>
     </div>
   );
@@ -160,7 +210,7 @@ export function MarketRow({ market, showDetails = true }) {
   const factors = Array.isArray(market.factors) ? market.factors : [];
   const risks = Array.isArray(market.risks) ? market.risks : [];
   return (
-    <Panel className="tight market-row">
+    <Panel className={`tight market-row ${suggested ? 'recommended' : ''}`}>
       <div className="between" style={{ gap: 10, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
           <div className="wrap" style={{ gap: 6 }}>
