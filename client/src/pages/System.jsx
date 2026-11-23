@@ -110,11 +110,11 @@ export default function System() {
           <div className="table-wrap">
             <table>
               <tbody>
-                <tr><td>Partidas</td><td className="mono">{data?.data?.fixtures ?? 0}</td></tr>
+                <tr><td>Partidas</td><td className="mono">{data?.data?.fixtures?.total ?? 0}</td></tr>
                 <tr><td>Competições</td><td className="mono">{data?.data?.competitions ?? 0}</td></tr>
                 <tr><td>Equipes</td><td className="mono">{data?.data?.teams ?? 0}</td></tr>
                 <tr><td>Registros de estatística por equipe/partida</td><td className="mono">{data?.data?.teamMatchStats ?? 0}</td></tr>
-                <tr><td>Recomendações registradas</td><td className="mono">{data?.data?.recommendations ?? 0}</td></tr>
+                <tr><td>Recomendações registradas</td><td className="mono">{data?.data?.recommendations?.total ?? 0}</td></tr>
                 <tr><td>Entradas em cache</td><td className="mono">{data?.data?.cache?.entries ?? 0}</td></tr>
               </tbody>
             </table>
