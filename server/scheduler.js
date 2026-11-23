@@ -179,7 +179,6 @@ async function deepHistoryCycle() {
 }
 
 async function historyCycle() {
-  // Ciclo curto mantém placares recentes frescos; o profundo vem em lotes.
   await guard('history-finished', () => syncRecentFinished({ toOffset: 7 }));
   await warmUpcomingHistories();
   // Grava as recomendações do momento para o histórico acumular GREEN/RED
@@ -207,7 +206,7 @@ export function startScheduler() {
   const boot = async () => {
     await scheduledCycle();
     await historyCycle();
-    void deepHistoryCycle();
+    void deepHistoryLoop();
     await liveCycle();
   };
   boot();
