@@ -170,6 +170,10 @@ async function deepHistoryCycle() {
   schedulerState.deepHistoryCursor = to;
   schedulerState.lastDeepHistoryAt = nowIso();
   schedulerState.lastDeepHistoryResult = { from, to, fixtures: result.fixtures, stats: result.stats };
+  // Cada lote deixa o histórico mais rico: revalida o modelo já com os dados
+  // novos, em vez de esperar o intervalo de 6 horas e o painel ficar vazio.
+  schedulerState.lastBacktestAt = null;
+  await modelValidationCycle();
 }
 
 async function historyCycle() {
