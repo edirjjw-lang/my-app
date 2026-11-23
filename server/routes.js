@@ -22,7 +22,7 @@ import {
   listRecommendations,
   settlePendingRecommendations,
 } from './services/history.js';
-import { getBacktestRun, listBacktestRuns, runBacktest } from './services/backtest.js';
+import { backtestDiagnostics, getBacktestRun, listBacktestRuns, runBacktest } from './services/backtest.js';
 import { lastSyncRuns, syncDate, syncLive, syncRecentFinished, syncSchedule, syncTeamHistory } from './services/ingest.js';
 import { schedulerState } from './scheduler.js';
 
@@ -311,7 +311,7 @@ apiRouter.get('/recommendations', (req, res) => {
 });
 
 apiRouter.get('/backtest', (req, res) => {
-  res.json({ runs: listBacktestRuns(req.query.limit) });
+  res.json({ runs: listBacktestRuns(req.query.limit), diagnostics: backtestDiagnostics() });
 });
 
 apiRouter.get('/backtest/:id', (req, res) => {

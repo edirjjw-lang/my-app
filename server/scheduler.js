@@ -4,6 +4,7 @@ import { getProvider } from './provider/index.js';
 import { syncDate, syncLive, syncRecentFinished, syncSchedule, syncTeamHistory } from './services/ingest.js';
 import { settlePendingRecommendations } from './services/history.js';
 import { runBacktest } from './services/backtest.js';
+import { collectOpportunities } from './services/analysis.js';
 
 export const schedulerState = {
   running: false,
@@ -150,6 +151,9 @@ async function modelValidationCycle() {
 async function historyCycle() {
   await guard('history-finished', () => syncRecentFinished());
   await warmUpcomingHistories();
+  // Grava as recomendações do momento para o histórico acumular GREEN/RED
+  // mesmo que ninguém abra a tela antes da partida terminar.
+  await guard('record-recommendations', async () => collectOpportunities({ limit: 24 }));
   await modelValidationCycle();
   schedulerState.lastHistoryAt = nowIso();
 }
