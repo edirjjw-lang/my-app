@@ -336,7 +336,7 @@ apiRouter.post(
     let result;
     if (scope === 'live') result = await syncLive();
     else if (scope === 'history') result = await syncRecentFinished();
-    else if (scope === 'schedule' || scope === 'all') {
+    else if (scope === 'schedule' || scope === 'scheduled' || scope === 'all') {
       result = await syncSchedule({ days: config.sync.scheduleDays });
     } else if (scope === 'team') {
       if (!req.body?.teamId) return res.status(400).json({ error: 'teamId_required' });
@@ -345,7 +345,7 @@ apiRouter.post(
       const date = String(req.body?.date || new Date().toISOString().slice(0, 10));
       result = await syncDate(date);
     } else {
-      return res.status(400).json({ error: 'invalid_scope', allowed: ['live', 'history', 'schedule', 'all', 'team', 'date'] });
+      return res.status(400).json({ error: 'invalid_scope', allowed: ['live', 'history', 'schedule', 'scheduled', 'all', 'team', 'date'] });
     }
     return res.json({ scope, result, status: buildStatus() });
   }),
