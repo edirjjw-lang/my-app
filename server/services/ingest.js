@@ -484,13 +484,17 @@ export function deriveAllFinishedStats() {
   return count;
 }
 
-export async function syncRecentFinished() {
+export async function syncRecentFinished({ fromOffset = 0, toOffset = null } = {}) {
   const startedAt = nowIso();
-  const windowDays = Math.min(Math.max(1, config.sync.historyDays), 14);
+  // Janela configurável: o cap antigo de 14 dias deixava cada time com 1-2
+  // jogos e o backtest descartava quase tudo. O histórico profundo é coletado
+  // em lotes (fromOffset/toOffset) para não travar o boot.
+  const windowDays = Math.min(Math.max(1, toOffset ?? config.sync.historyDays), 365);
+  const startOffset = Math.max(0, Math.min(fromOffset, windowDays));
   let upserted = 0;
   let pages = 0;
   try {
-    for (let offset = 0; offset < windowDays; offset += 1) {
+    for (let offset = startOffset; offset < windowDays; offset += 1) {
       const date = new Date(Date.now() - offset * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
       const result = await syncDate(date);
       upserted += result.fixtures ?? 0;
@@ -498,7 +502,7 @@ export async function syncRecentFinished() {
     }
     const stats = deriveAllFinishedStats();
     await recordSyncRun('finished', startedAt, { ok: true, fixtures: upserted, stats });
-    return { ok: true, fixtures: upserted, stats, pages, days: windowDays };
+    return { ok: true, fixtures: upserted, stats, pages, days: windowDays - startOffset, fromOffset: startOffset, toOffset: windowDays };
   } catch (error) {
     logEvent('error', 'sync-finished', error.message);
     await recordSyncRun('finished', startedAt, { ok: false, error: error.message });
