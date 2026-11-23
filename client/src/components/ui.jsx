@@ -31,7 +31,7 @@ export function QualityChip({ quality }) {
   const tone = level === 'ALTA' ? 'green' : level === 'MEDIA' ? 'amber' : level === 'BAIXA' ? 'red' : 'muted';
   return (
     <Chip tone={tone}>
-      Dados: {QUALITY_LABEL[level] ?? level}
+      {QUALITY_LABEL[level] ?? level}
       {quality?.sample ? ` · ${quality.sample} jogo(s)` : ''}
     </Chip>
   );
