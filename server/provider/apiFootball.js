@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import { ProviderError, providerRequest } from './http.js';
+import { ProviderError, collectPages, providerRequest } from './http.js';
 
 const LIVE_CODES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP']);
 const FINISHED_CODES = new Set(['FT', 'AET', 'PEN', 'AWD', 'WO']);
@@ -300,6 +300,50 @@ export function normalizeInjuries(responseItems) {
     .filter((entry) => entry.teamId && entry.playerName);
 }
 
+/**
+ * Coleta TODAS as páginas de uma consulta de jogos. A API-Football pagina as
+ * respostas (`paging.total`); ler só a primeira página descartaria ligas e
+ * partidas inteiras. Nenhum filtro de liga/campeonato é aplicado aqui.
+ */
+async function collectFixturePages(path, { cachePrefix, ttlMs }) {
+  let stale = false;
+  let fetchedAt = null;
+  const result = await collectPages(
+    async (page) => {
+      const response = await call(`${path}&page=${page}`, {
+        cacheKey: `${cachePrefix}:p${page}`,
+        ttlMs,
+      });
+      stale = stale || Boolean(response.stale);
+      fetchedAt = response.fetchedAt ?? fetchedAt;
+      return {
+        items: (response.payload?.response || [])
+          .map(normalizeFixture)
+          .filter((item) => item.providerId && item.home?.providerId && item.away?.providerId && item.kickoffUtc),
+        payload: response.payload,
+      };
+    },
+    { maxPages: Math.max(1, config.maxPages) },
+  );
+
+  const leagues = new Set();
+  for (const item of result.items) {
+    const key = item.competition?.providerId ?? item.competition?.name;
+    if (key) leagues.add(String(key));
+  }
+
+  return {
+    fixtures: result.items,
+    pages: result.pages.length,
+    totalPages: result.totalPages,
+    partial: result.partial,
+    error: result.error,
+    leagues: leagues.size,
+    stale,
+    fetchedAt,
+  };
+}
+
 export const apiFootballProvider = {
   id: 'api-football',
   label: 'API-Football (v3)',
@@ -316,29 +360,17 @@ export const apiFootballProvider = {
   },
 
   async fetchLiveFixtures() {
-    const { payload, cached, stale, fetchedAt } = await call('/fixtures?live=all', {
-      cacheKey: 'live',
-      ttlMs: CACHE_TTL.live,
-    });
-    const fixtures = (payload.response || [])
-      .map(normalizeFixture)
-      .filter((item) => item.providerId && item.home.providerId && item.away.providerId && item.kickoffUtc);
-    return { fixtures, cached, stale, fetchedAt };
+    // live=all devolve todos os jogos em andamento de todas as ligas; segue todas as páginas.
+    return collectFixturePages('/fixtures?live=all', { cachePrefix: 'live', ttlMs: CACHE_TTL.live });
   },
 
   async fetchFixturesByDate(dateIso) {
     const date = dateIso.slice(0, 10);
-    const { payload, stale, fetchedAt } = await call(`/fixtures?date=${date}&timezone=UTC`, {
-      cacheKey: `date:${date}`,
+    // Uma data pode ter centenas de jogos em dezenas de ligas: todas as páginas são lidas.
+    return collectFixturePages(`/fixtures?date=${date}&timezone=UTC`, {
+      cachePrefix: `date:${date}`,
       ttlMs: CACHE_TTL.fixtures,
     });
-    return {
-      fixtures: (payload.response || [])
-        .map(normalizeFixture)
-        .filter((item) => item.providerId && item.home.providerId && item.away.providerId && item.kickoffUtc),
-      stale,
-      fetchedAt,
-    };
   },
 
   async fetchFixtureStatistics(fixtureId) {
@@ -382,22 +414,18 @@ export const apiFootballProvider = {
   },
 
   async fetchTeamMatches(teamId, last = 10) {
-    const { payload } = await call(`/fixtures?team=${teamId}&last=${last}`, {
-      cacheKey: `team:${teamId}:${last}`,
+    const result = await collectFixturePages(`/fixtures?team=${teamId}&last=${last}`, {
+      cachePrefix: `team:${teamId}:${last}`,
       ttlMs: CACHE_TTL.teamMatches,
     });
-    return (payload.response || [])
-      .map(normalizeFixture)
-      .filter((item) => item.providerId && item.home.providerId && item.away.providerId);
+    return result.fixtures;
   },
 
   async fetchHeadToHead(homeId, awayId, last = 10) {
-    const { payload } = await call(`/fixtures/headtohead?h2h=${homeId}-${awayId}&last=${last}`, {
-      cacheKey: `h2h:${homeId}:${awayId}:${last}`,
+    const result = await collectFixturePages(`/fixtures/headtohead?h2h=${homeId}-${awayId}&last=${last}`, {
+      cachePrefix: `h2h:${homeId}:${awayId}:${last}`,
       ttlMs: CACHE_TTL.headToHead,
     });
-    return (payload.response || [])
-      .map(normalizeFixture)
-      .filter((item) => item.providerId && item.home.providerId && item.away.providerId);
+    return result.fixtures;
   },
 };

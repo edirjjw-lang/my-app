@@ -335,7 +335,7 @@ export async function syncLive() {
   const startedAt = nowIso();
   const provider = getProvider();
   try {
-    const { fixtures } = await provider.fetchLiveFixtures();
+    const { fixtures, pages = 1, partial = false, error: partialError } = await provider.fetchLiveFixtures();
     let upserted = 0;
     for (const item of fixtures) {
       if (upsertFixture(item)) upserted += 1;
@@ -355,8 +355,14 @@ export async function syncLive() {
       }
     }
 
-    await recordSyncRun('live', startedAt, { ok: true, fixtures: upserted, stats: statsApplied });
-    return { ok: true, fixtures: upserted, stats: statsApplied };
+    if (partial) logEvent('warn', 'sync-live', `Coleta parcial (${pages} páginas): ${partialError}`);
+    await recordSyncRun('live', startedAt, {
+      ok: !partial,
+      fixtures: upserted,
+      stats: statsApplied,
+      error: partial ? partialError : null,
+    });
+    return { ok: !partial, fixtures: upserted, stats: statsApplied, pages, partial };
   } catch (error) {
     logEvent('error', 'sync-live', error.message);
     await recordSyncRun('live', startedAt, { ok: false, error: error.message });
@@ -368,18 +374,58 @@ export async function syncDate(dateIso) {
   const startedAt = nowIso();
   const provider = getProvider();
   try {
-    const { fixtures } = await provider.fetchFixturesByDate(dateIso);
+    const { fixtures, pages = 1, partial = false, error: partialError } = await provider.fetchFixturesByDate(dateIso);
     let upserted = 0;
     for (const item of fixtures) {
       if (upsertFixture(item)) upserted += 1;
     }
-    await recordSyncRun('date', startedAt, { ok: true, fixtures: upserted });
-    return { ok: true, fixtures: upserted };
+    if (partial) logEvent('warn', 'sync-date', `${dateIso}: coleta parcial (${pages} páginas): ${partialError}`);
+    await recordSyncRun('date', startedAt, {
+      ok: !partial,
+      fixtures: upserted,
+      error: partial ? partialError : null,
+    });
+    return { ok: !partial, fixtures: upserted, pages, partial };
   } catch (error) {
     logEvent('error', 'sync-date', error.message);
     await recordSyncRun('date', startedAt, { ok: false, error: error.message });
     throw error;
   }
+}
+
+/**
+ * Agenda completa: todos os jogos de TODAS as ligas para cada dia da janela
+ * (SCHEDULE_DAYS, padrão 7). Nenhum campeonato é filtrado; cada data lê todas
+ * as páginas que o provedor devolver.
+ */
+export async function syncSchedule({ days = config.sync.scheduleDays, from = Date.now() } = {}) {
+  const startedAt = nowIso();
+  const windowSize = Math.max(1, Number(days) || 1);
+  const total = { ok: true, fixtures: 0, pages: 0, days: 0, dates: [], partial: false, errors: [] };
+
+  for (let offset = 0; offset < windowSize; offset += 1) {
+    const date = new Date(from + offset * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    try {
+      const result = await syncDate(date);
+      total.fixtures += result.fixtures ?? 0;
+      total.pages += result.pages ?? 0;
+      total.days += 1;
+      total.dates.push(date);
+      if (result.partial) total.partial = true;
+    } catch (error) {
+      total.ok = false;
+      total.errors.push(`${date}: ${error.message}`);
+      logEvent('error', 'sync-schedule', `${date}: ${error.message}`);
+    }
+  }
+
+  if (total.partial) total.ok = false;
+  await recordSyncRun('schedule', startedAt, {
+    ok: total.ok,
+    fixtures: total.fixtures,
+    error: total.errors.join('; ') || null,
+  });
+  return total;
 }
 
 /**
@@ -439,17 +485,19 @@ export function deriveAllFinishedStats() {
 
 export async function syncRecentFinished() {
   const startedAt = nowIso();
-  const today = new Date();
-  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+  const windowDays = Math.min(Math.max(1, config.sync.historyDays), 14);
   let upserted = 0;
+  let pages = 0;
   try {
-    for (const date of [today.toISOString().slice(0, 10), yesterday.toISOString().slice(0, 10)]) {
+    for (let offset = 0; offset < windowDays; offset += 1) {
+      const date = new Date(Date.now() - offset * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
       const result = await syncDate(date);
       upserted += result.fixtures ?? 0;
+      pages += result.pages ?? 0;
     }
     const stats = deriveAllFinishedStats();
     await recordSyncRun('finished', startedAt, { ok: true, fixtures: upserted, stats });
-    return { ok: true, fixtures: upserted, stats };
+    return { ok: true, fixtures: upserted, stats, pages, days: windowDays };
   } catch (error) {
     logEvent('error', 'sync-finished', error.message);
     await recordSyncRun('finished', startedAt, { ok: false, error: error.message });
