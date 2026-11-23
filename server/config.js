@@ -57,6 +57,8 @@ export const config = {
     preferredMinOdd: num(process.env.PREFERRED_MIN_ODD, 1.5),
     preferredMaxOdd: num(process.env.PREFERRED_MAX_ODD, 1.8),
     minEdge: num(process.env.MIN_EDGE, 0.03),
+    // Sem odds de mercado a indicação exige probabilidade calculada mínima.
+    minProbability: num(process.env.MIN_PROBABILITY, 0.6),
     minConfidence: (process.env.MIN_CONFIDENCE || 'MODERADA').toUpperCase(),
     stake: num(process.env.UNIT_STAKE, 1),
   },

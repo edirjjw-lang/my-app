@@ -112,8 +112,26 @@ function decideEntry({ probability, bookmakerOdds, edge, confidence, filters, qu
   if (quality.level === 'INSUFICIENTE' || liveIncomplete) {
     return { entry: ENTRY.NO_ENTRY, reason: 'Dados insuficientes ou desatualizados — recomendações bloqueadas.' };
   }
+  const confidenceOk = CONFIDENCE_RANK[confidence] >= CONFIDENCE_RANK[filters.minConfidence];
   if (!Number.isFinite(bookmakerOdds)) {
-    return { entry: ENTRY.NO_ENTRY, reason: 'Sem odd de mercado disponível para este mercado.' };
+    // Sem odd de mercado a indicação usa apenas a probabilidade calculada e a
+    // confiança do modelo. Nenhuma odd é inventada e nenhuma vantagem é alegada.
+    if (!confidenceOk) {
+      return {
+        entry: ENTRY.NO_ENTRY,
+        reason: `Confiança ${confidence} abaixo do mínimo exigido (${filters.minConfidence}).`,
+      };
+    }
+    if (probability < filters.minProbability) {
+      return {
+        entry: ENTRY.NO_ENTRY,
+        reason: `Probabilidade ${(probability * 100).toFixed(1)}% abaixo do mínimo ${(filters.minProbability * 100).toFixed(0)}%.`,
+      };
+    }
+    if (probability >= 0.92) {
+      return { entry: ENTRY.NO_ENTRY, reason: 'Probabilidade extrema: sem valor esperado confiável.' };
+    }
+    return { entry: ENTRY.RECOMMENDED, reason: null };
   }
   if (bookmakerOdds < filters.minOdd) {
     return {
@@ -127,7 +145,7 @@ function decideEntry({ probability, bookmakerOdds, edge, confidence, filters, qu
       reason: `Sem vantagem estatística (${(edge * 100).toFixed(1)}% < ${(filters.minEdge * 100).toFixed(1)}% mínimo).`,
     };
   }
-  if (CONFIDENCE_RANK[confidence] < CONFIDENCE_RANK[filters.minConfidence]) {
+  if (!confidenceOk) {
     return {
       entry: ENTRY.NO_ENTRY,
       reason: `Confiança ${confidence} abaixo do mínimo exigido (${filters.minConfidence}).`,
@@ -161,6 +179,7 @@ export function analyzeFixture({
     preferredMaxOdd: filters.preferredMaxOdd ?? 1.8,
     minEdge: filters.minEdge ?? 0.03,
     minConfidence: filters.minConfidence ?? 'MODERADA',
+    minProbability: filters.minProbability ?? 0.6,
   };
 
   const isLive = ['LIVE', 'HT'].includes(fixture.status);
@@ -487,20 +506,16 @@ export function analyzeFixture({
 
   const recommended = markets
     .filter((market) => market.entry === ENTRY.RECOMMENDED)
-    .sort((a, b) => b.confidenceScore - a.confidenceScore || (b.edge ?? -1) - (a.edge ?? -1));
+    .sort((a, b) => b.confidenceScore - a.confidenceScore || b.probability - a.probability);
 
   const noEntryReasons = [];
   if (!recommended.length) {
-    const withOdds = markets.filter((m) => Number.isFinite(m.bookmakerOdds));
-    if (!withOdds.length) noEntryReasons.push('Nenhuma odd de mercado disponível para esta partida.');
-    else {
-      const minEdgeGap = withOdds
-        .map((m) => m.reason)
-        .filter(Boolean)
-        .slice(0, 3);
-      noEntryReasons.push(...minEdgeGap);
-    }
-    if (!noEntryReasons.length) noEntryReasons.push('Nenhuma vantagem estatística identificada.');
+    const rejectionReasons = markets
+      .map((market) => market.reason)
+      .filter(Boolean)
+      .slice(0, 3);
+    if (rejectionReasons.length) noEntryReasons.push(...rejectionReasons);
+    else noEntryReasons.push('Nenhum mercado atingiu o mínimo de probabilidade e confiança.');
   }
 
   return {

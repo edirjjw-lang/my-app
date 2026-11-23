@@ -77,6 +77,9 @@ export function computeConfidence({
 }) {
   const sampleScore = clamp(sample / 10, 0, 1);
   const edgeScore = hasOdds && Number.isFinite(edge) ? clamp(edge / 0.12, 0, 1) : 0;
+  // Sem odd de mercado, o peso da vantagem passa para a probabilidade calculada:
+  // quanto mais longe de 50% e mais amostra, mais confiável é a indicação.
+  const probabilityScore = clamp((probability - 0.5) / 0.35, 0, 1);
   const stability = Number.isFinite(coefficientOfVariation)
     ? clamp(1 - coefficientOfVariation, 0, 1)
     : 0.5;
@@ -84,11 +87,16 @@ export function computeConfidence({
   const livePenalty = live ? 0.9 : 1;
   const probabilitySanity = probability >= 0.08 && probability <= 0.92 ? 1 : 0.6;
 
-  const score =
-    (0.3 * sampleScore +
+  const score = (hasOdds
+    ? 0.3 * sampleScore +
       0.2 * clamp(qualityScore, 0, 1) +
       0.25 * edgeScore +
       0.15 * stability +
+      0.1 * marketReliability
+    : 0.28 * sampleScore +
+      0.18 * clamp(qualityScore, 0, 1) +
+      0.32 * probabilityScore +
+      0.12 * stability +
       0.1 * marketReliability) *
     livePenalty *
     probabilitySanity;

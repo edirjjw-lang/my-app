@@ -45,7 +45,7 @@ async function warmLiveHistories() {
     teamIds.add(row.home_team_id);
     teamIds.add(row.away_team_id);
   }
-  let budget = 2;
+  let budget = 6;
   for (const teamId of teamIds) {
     if (budget <= 0) break;
     const team = all('SELECT provider_id, history_synced_at FROM teams WHERE id = ?', [teamId])[0];
@@ -79,7 +79,7 @@ async function warmUpcomingHistories() {
                WHERE status = 'SCHEDULED' AND kickoff_utc BETWEEN ? AND ?
             )
         AND (t.history_synced_at IS NULL OR t.history_synced_at < ?)
-      LIMIT 3`,
+      LIMIT 15`,
     [from, to, from, to, staleBefore],
   );
   for (const team of teams) {
@@ -108,6 +108,7 @@ async function scheduledCycle() {
 
 async function historyCycle() {
   await guard('history-finished', () => syncRecentFinished());
+  await warmUpcomingHistories();
   schedulerState.lastHistoryAt = nowIso();
 }
 
