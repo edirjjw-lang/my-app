@@ -24,7 +24,7 @@ export const config = {
   dbPath: process.env.DB_PATH || path.join(__dirname, '..', 'data', 'futebolpro.db'),
   distPath: path.join(__dirname, '..', 'dist'),
 
-  provider: (process.env.FOOTBALL_API_PROVIDER || 'api-football').trim().toLowerCase(),
+  provider: (process.env.FOOTBALL_API_PROVIDER || 'bzzoiro').trim().toLowerCase(),
   apiKey: (process.env.FOOTBALL_API_KEY || '').trim(),
   apiBaseUrl: (process.env.FOOTBALL_API_BASE_URL || '').trim(),
   apiHost: (process.env.FOOTBALL_API_HOST || '').trim(),
