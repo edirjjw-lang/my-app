@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { fmt, GROUP_LABEL, QUALITY_LABEL, STATUS_LABEL } from '../api.js';
 
 export function Chip({ tone = '', children, dot = false }) {
@@ -40,20 +41,41 @@ function paletteFor(name) {
   return BADGE_PALETTES[hash % BADGE_PALETTES.length];
 }
 
-/** Escudo do time: usa o logo real quando a fonte fornece, senão as iniciais. */
+/**
+ * Escudo do time. A fonte de dados não fornece imagem de escudo, então o
+ * app desenha um escudo vetorial próprio, com cor estável derivada do nome e
+ * as iniciais da equipe. Se a fonte passar a mandar `logo`, a imagem real
+ * substitui o desenho automaticamente.
+ */
 export function TeamBadge({ name, logo, size = 'md' }) {
+  const gradientId = useId().replace(/:/g, '');
   const [from, to] = paletteFor(name);
   const style = { '--badge-from': from, '--badge-to': to };
   if (logo) {
     return (
-      <span className={`team-badge ${size}`} style={style}>
+      <span className={`team-badge crest ${size}`} style={style}>
         <img src={logo} alt="" loading="lazy" />
       </span>
     );
   }
   return (
-    <span className={`team-badge ${size}`} style={style} aria-hidden="true">
-      {teamInitials(name)}
+    <span className={`team-badge crest ${size}`} style={style} aria-hidden="true">
+      <svg className="crest-svg" viewBox="0 0 40 46" focusable="false">
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor={from} />
+            <stop offset="100%" stopColor={to} />
+          </linearGradient>
+        </defs>
+        <path
+          d="M20 1.8 37.2 7.2v15.4c0 9.6-7 17.3-17.2 21.1C9.8 39.9 2.8 32.2 2.8 22.6V7.2Z"
+          fill={`url(#${gradientId})`}
+          stroke="rgba(255,255,255,0.38)"
+          strokeWidth="1.3"
+        />
+        <path d="M20 1.8 37.2 7.2v5.6H2.8V7.2Z" fill="rgba(255,255,255,0.18)" />
+      </svg>
+      <b className="crest-text">{teamInitials(name)}</b>
     </span>
   );
 }

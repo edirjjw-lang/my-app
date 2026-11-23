@@ -221,3 +221,69 @@ export function calibrationBuckets(predictions) {
       observed: bucket.observed / bucket.count,
     }));
 }
+
+/**
+ * Correção de Dixon-Coles para placares baixos.
+ * O Poisson independente subestima 0-0 e 1-1 e superestima 1-0 / 0-1, porque
+ * os gols das duas equipes não são de fato independentes nos placares baixos.
+ * rho negativo (padrão -0.05) devolve massa a 0-0 e 1-1.
+ */
+export function dixonColesTau(home, away, lambdaHome, lambdaAway, rho) {
+  if (!rho) return 1;
+  if (home === 0 && away === 0) return 1 - lambdaHome * lambdaAway * rho;
+  if (home === 0 && away === 1) return 1 + lambdaHome * rho;
+  if (home === 1 && away === 0) return 1 + lambdaAway * rho;
+  if (home === 1 && away === 1) return 1 - rho;
+  return 1;
+}
+
+/** Matriz de placares com correção de Dixon-Coles, normalizada. */
+export function dixonColesMatrix(lambdaHome, lambdaAway, { maxGoals = 10, rho = -0.05 } = {}) {
+  const matrix = [];
+  let total = 0;
+  for (let home = 0; home <= maxGoals; home += 1) {
+    matrix[home] = [];
+    for (let away = 0; away <= maxGoals; away += 1) {
+      const base = poissonPmf(home, lambdaHome) * poissonPmf(away, lambdaAway);
+      const prob = Math.max(0, base * dixonColesTau(home, away, lambdaHome, lambdaAway, rho));
+      matrix[home][away] = prob;
+      total += prob;
+    }
+  }
+  if (total > 0) {
+    for (let home = 0; home <= maxGoals; home += 1) {
+      for (let away = 0; away <= maxGoals; away += 1) {
+        matrix[home][away] /= total;
+      }
+    }
+  }
+  return matrix;
+}
+
+/** P(total de gols > line) lendo a matriz de placares (respeita Dixon-Coles). */
+export function matrixTailAbove(matrix, line) {
+  let above = 0;
+  let total = 0;
+  for (let home = 0; home < matrix.length; home += 1) {
+    for (let away = 0; away < matrix[home].length; away += 1) {
+      const p = matrix[home][away];
+      total += p;
+      if (home + away > line) above += p;
+    }
+  }
+  return total > 0 ? clamp01(above / total) : 0;
+}
+
+/** Média de gols totais implícita na matriz de placares. */
+export function matrixMeanGoals(matrix) {
+  let total = 0;
+  let sum = 0;
+  for (let home = 0; home < matrix.length; home += 1) {
+    for (let away = 0; away < matrix[home].length; away += 1) {
+      const p = matrix[home][away];
+      total += p;
+      sum += (home + away) * p;
+    }
+  }
+  return total > 0 ? sum / total : 0;
+}
