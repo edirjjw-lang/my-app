@@ -130,7 +130,7 @@ test('Mercados exigidos existem: gols, escanteios e resultados', () => {
   }
   assert.ok(keys.some((key) => key.includes('1x2')));
   assert.ok(keys.some((key) => key.includes('btts')));
-  assert.ok(keys.some((key) => key.includes('dc')));
+  assert.ok(keys.some((key) => key.includes('double_chance')));
   assert.ok(analysis.markets.some((market) => market.group === 'ESCANTEIO'));
   assert.ok(analysis.markets.some((market) => market.group === 'GOLS' && market.period === '1H'));
 });
