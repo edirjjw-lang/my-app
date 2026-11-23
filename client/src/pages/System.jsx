@@ -38,7 +38,7 @@ export default function System() {
     setMessage(null);
     setAdminToken(token.trim());
     try {
-      const result = await api('/history/settle', { method: 'POST', body: {} });
+      const result = await api('/settle', { method: 'POST', body: {} });
       setMessage(`Liquidação concluída: ${result.settled ?? 0} recomendação(ões) atualizada(s).`);
       await reload(true);
     } catch (requestError) {

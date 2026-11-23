@@ -186,14 +186,14 @@ export default function Backtest() {
                   <div className="between" style={{ flexWrap: 'wrap', gap: 8 }}>
                     <div>
                       <div className="small" style={{ fontWeight: 700 }}>
-                        {run.from_date?.slice(0, 10)} → {run.to_date?.slice(0, 10)}
+                        {String(run.from ?? '').slice(0, 10)} → {String(run.to ?? '').slice(0, 10)}
                       </div>
                       <div className="tiny muted">
-                        {run.fixtures ?? run.fixtures_evaluated ?? 0} partidas · {fmt.dateTime(run.created_at)}
+                        {run.fixturesEvaluated ?? 0} partidas · {run.marketsEvaluated ?? 0} mercados · {fmt.dateTime(run.createdAt)}
                       </div>
                     </div>
                     <div className="wrap">
-                      <Chip tone="blue">Acerto {fmt.pct(run.hit_rate)}</Chip>
+                      <Chip tone="blue">Acerto {fmt.pct(run.hitRate)}</Chip>
                       <Chip tone={run.roi >= 0 ? 'green' : 'red'}>ROI {fmt.pct(run.roi)}</Chip>
                       <Chip tone="muted">Brier {fmt.num(run.brier, 3)}</Chip>
                     </div>
