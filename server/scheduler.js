@@ -129,7 +129,11 @@ async function modelValidationCycle() {
   if (last?.created_at) {
     const age = Date.now() - Date.parse(last.created_at);
     const emptyRun = Number(last.fixtures_evaluated ?? 0) === 0;
-    if (age < (emptyRun ? BACKTEST_RETRY_MS : BACKTEST_INTERVAL_MS)) return;
+    // Na primeira verificação do processo (boot/deploy) uma rodada vazia é
+    // refeita na hora; depois respeita o intervalo curto de retentativa.
+    const firstCheckOfProcess = !schedulerState.lastBacktestAt;
+    const waitMs = emptyRun ? (firstCheckOfProcess ? 0 : BACKTEST_RETRY_MS) : BACKTEST_INTERVAL_MS;
+    if (age < waitMs) return;
   }
 
   const result = await guard('backtest', () => runBacktest({ maxFixtures: 150 }));
