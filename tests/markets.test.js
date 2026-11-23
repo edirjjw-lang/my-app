@@ -22,8 +22,9 @@ test('Gols: mais e menos de 2.5 liquidam corretamente', () => {
 test('Gols: mercados de primeiro e segundo tempo usam os gols do período', () => {
   assert.equal(settleMarket({ group: 'GOLS', marketType: 'over', line: 0.5, period: '1H' }, final), 'GREEN');
   assert.equal(settleMarket({ group: 'GOLS', marketType: 'over', line: 1.5, period: '1H' }, final), 'RED');
-  assert.equal(settleMarket({ group: 'GOLS', marketType: 'over', line: 1.5, period: '2H' }, final), 'RED');
-  assert.equal(settleMarket({ group: 'GOLS', marketType: 'under', line: 1.5, period: '2H' }, final), 'GREEN');
+  assert.equal(settleMarket({ group: 'GOLS', marketType: 'over', line: 1.5, period: '2H' }, final), 'GREEN');
+  assert.equal(settleMarket({ group: 'GOLS', marketType: 'under', line: 1.5, period: '2H' }, final), 'RED');
+  assert.equal(settleMarket({ group: 'GOLS', marketType: 'over', line: 2.5, period: '2H' }, final), 'RED');
 });
 
 test('Gols: sem dados do intervalo o mercado não é liquidado', () => {

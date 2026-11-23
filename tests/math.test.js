@@ -30,8 +30,11 @@ test('Poisson: cauda acima da linha decresce com a linha', () => {
 
 test('Poisson: cauda considera gols já marcados no ao vivo', () => {
   const before = tailAbove(2.7, 2.5);
-  const live = tailAbove(2.7, 2.5, { current: 2 });
-  assert.equal(live, 1, 'com 2 gols e linha 2.5, mais de 2.5 é certeza');
+  const withTwo = tailAbove(2.7, 2.5, { current: 2 });
+  const withThree = tailAbove(2.7, 2.5, { current: 3 });
+  assert.equal(withThree, 1, 'com 3 gols e linha 2.5 o mercado já está resolvido');
+  assert.ok(Math.abs(withTwo - (1 - Math.exp(-2.7))) < 1e-9, 'com 2 gols falta 1 gol');
+  assert.ok(withTwo > before, 'gols já marcados aumentam a probabilidade');
   assert.ok(before < 1);
 });
 
