@@ -1,328 +1,266 @@
-import { useMemo, useState } from 'react';
-import { api, fmt, GROUP_LABEL, useApi } from '../api.js';
+import { useState } from 'react';
+import { fmt, GROUP_LABEL, useApi } from '../api.js';
 import {
   Alert,
   Chip,
   ConfidenceChip,
+  EmptyState,
   Loading,
   MarketRow,
   Metric,
   Panel,
+  ProbBar,
   QualityChip,
   SectionHead,
   StatCompare,
   StatusChip,
 } from '../components/ui.jsx';
 
-const GROUP_TABS = ['TODOS', 'GOLS', 'ESCANTEIO', 'RESULTADO'];
+const TABS = ['TODOS', 'GOLS', 'ESCANTEIO', 'RESULTADO'];
 
-function injuryText(injury) {
-  if (!injury) return '';
-  if (typeof injury === 'string') return injury;
-  const player = injury.player ?? injury.name ?? injury.playerName ?? '';
-  const team = injury.team === 'home' ? 'Casa' : injury.team === 'away' ? 'Fora' : injury.teamName ?? '';
-  const reason = injury.reason ?? injury.type ?? '';
-  return [player, team, reason].filter(Boolean).join(' · ');
+function matchesTab(group, tab) {
+  if (tab === 'TODOS') return true;
+  const normalized = String(group ?? '').toUpperCase();
+  if (tab === 'ESCANTEIO') return normalized.startsWith('ESCANTEIO');
+  return normalized.startsWith(tab);
+}
+
+function BetCard({ market, index }) {
+  const factors = Array.isArray(market.factors) ? market.factors : [];
+  const risks = Array.isArray(market.risks) ? market.risks : [];
+  return (
+    <Panel className="bet-card">
+      <div className="between" style={{ gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="wrap" style={{ gap: 6 }}>
+            <Chip tone="green">#{index + 1} aposta</Chip>
+            <Chip tone="muted">{GROUP_LABEL[market.group] ?? market.group}</Chip>
+          </div>
+          <div style={{ fontWeight: 800, fontSize: '1.05rem', marginTop: 8 }}>{market.label}</div>
+        </div>
+        <div style={{ textAlign: 'right', minWidth: 140 }}>
+          <div className="tiny muted">Probabilidade estimada</div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--green)', lineHeight: 1.1 }}>
+            {fmt.pct(market.probability, 0)}
+          </div>
+          <div style={{ marginTop: 6 }}>
+            <ConfidenceChip value={market.confidence} />
+          </div>
+        </div>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <ProbBar probability={market.probability} />
+      </div>
+      {factors.length ? (
+        <div style={{ marginTop: 12 }}>
+          <div className="tiny" style={{ color: 'var(--green)', fontWeight: 700 }}>
+            A favor
+          </div>
+          <ul className="factor-list">
+            {factors.map((factor) => (
+              <li key={factor} className="small">
+                {factor}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {risks.length ? (
+        <div style={{ marginTop: 10 }}>
+          <div className="tiny" style={{ color: 'var(--red)', fontWeight: 700 }}>
+            Riscos
+          </div>
+          <ul className="factor-list">
+            {risks.map((risk) => (
+              <li key={risk} className="small">
+                {risk}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {market.rationale ? (
+        <p className="small muted" style={{ marginTop: 10 }}>
+          <b style={{ color: 'var(--text)' }}>Por que: </b>
+          {market.rationale}
+        </p>
+      ) : null}
+    </Panel>
+  );
 }
 
 export default function Match({ id, navigate }) {
   const { data, error, loading, reload } = useApi(`/fixtures/${id}`, { refreshMs: 30_000 });
   const [tab, setTab] = useState('TODOS');
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshMsg, setRefreshMsg] = useState(null);
 
-  const analysis = data?.analysis;
   const fixture = data?.fixture;
+  const analysis = data?.analysis;
+  const markets = analysis?.markets ?? [];
+  const recommended = analysis?.recommended ?? [];
+  const isLive = fixture && (fixture.status === 'LIVE' || fixture.status === 'HT');
+  const filtered = markets.filter((market) => matchesTab(market.group, tab));
 
-  const markets = useMemo(() => {
-    const list = analysis?.markets ?? [];
-    const filtered = tab === 'TODOS' ? list : list.filter((market) => market.group === tab);
-    return [...filtered].sort((a, b) => {
-      const aRec = a.entry === 'RECOMENDADA' ? 1 : 0;
-      const bRec = b.entry === 'RECOMENDADA' ? 1 : 0;
-      if (aRec !== bRec) return bRec - aRec;
-      return (b.confidenceScore ?? 0) - (a.confidenceScore ?? 0);
-    });
-  }, [analysis, tab]);
-
-  async function forceRefresh() {
-    setRefreshing(true);
-    setRefreshMsg(null);
-    try {
-      const result = await api(`/fixtures/${id}?refresh=1`);
-      setRefreshMsg(result?.refresh?.reason || (result?.refresh?.refreshed ? 'Dados atualizados agora.' : 'Atualização concluída.'));
-      await reload(true);
-    } catch (requestError) {
-      setRefreshMsg(requestError.message);
-    } finally {
-      setRefreshing(false);
-    }
-  }
-
-  if (loading && !data) return <div style={{ marginTop: 18 }}><Loading rows={4} /></div>;
-
-  if (error && !data) {
+  if (loading && !data) {
     return (
       <div className="section">
-        <Alert tone="error" title="Não foi possível carregar a partida">
-          {error.message}
+        <Loading rows={3} />
+      </div>
+    );
+  }
+
+  if (error || !fixture) {
+    return (
+      <div className="section stack">
+        <Alert tone="red" title="Não foi possível carregar este jogo">
+          {error ?? 'Jogo não encontrado.'}
         </Alert>
-        <div style={{ marginTop: 12 }}>
+        <div>
           <button type="button" className="btn" onClick={() => navigate('/')}>
-            Voltar ao início
+            Voltar aos jogos
           </button>
         </div>
       </div>
     );
   }
 
-  if (!fixture || !analysis) {
-    return (
-      <div className="section">
-        <Alert title="Partida não encontrada">Volte ao início e escolha uma partida da lista.</Alert>
-      </div>
-    );
-  }
-
   const stats = fixture.stats ?? {};
-  const recommended = analysis.recommended ?? [];
-  const blocked = analysis.blocked || analysis.quality?.level === 'INSUFICIENTE';
 
   return (
     <>
       <div className="section">
-        <button type="button" className="btn sm ghost" onClick={() => navigate('/')}>
-          ← Voltar
+        <button type="button" className="btn ghost sm" onClick={() => navigate('/')}>
+          ← Todos os jogos
         </button>
       </div>
 
-      <Panel className="hero" style={{ marginTop: 12 }}>
-        <div className="wrap">
+      <Panel className="hero">
+        <div className="wrap" style={{ gap: 8 }}>
           <StatusChip status={fixture.status} minute={fixture.minute} />
-          {fixture.competition?.name ? <Chip tone="muted">{fixture.competition.name}</Chip> : null}
-          <QualityChip quality={analysis.quality} />
-          {fixture.hasStats ? <Chip tone="green">Estatísticas</Chip> : <Chip tone="amber">Sem estatísticas</Chip>}
-          {fixture.hasOdds ? <Chip tone="blue">Odds reais</Chip> : <Chip tone="amber">Sem odds</Chip>}
-          {fixture.hasLineups ? <Chip tone="blue">Escalações</Chip> : null}
+          {fixture.competition?.name ? <span className="tiny muted">{fixture.competition.name}</span> : null}
+          <QualityChip quality={analysis?.quality} />
         </div>
-        <h1 style={{ marginTop: 14 }}>
-          {fixture.home.name} <span className="muted" style={{ fontWeight: 500 }}>x</span> {fixture.away.name}
-        </h1>
-        <div className="wrap" style={{ marginTop: 8 }}>
-          <span style={{ fontSize: '1.6rem', fontWeight: 800 }} className="mono">
-            {fixture.score.home ?? 0} – {fixture.score.away ?? 0}
-          </span>
-          <span className="muted small">
-            {fixture.status === 'SCHEDULED'
-              ? `Início ${fmt.dateTime(fixture.kickoffUtc)}`
-              : `1º tempo: ${fixture.score.htHome ?? '—'} – ${fixture.score.htAway ?? '—'}`}
-          </span>
+        <div className="between" style={{ marginTop: 14, gap: 16, flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>{fixture.home.name}</div>
+            <div className="tiny muted">{isLive ? 'Mandante · ao vivo' : 'Mandante'}</div>
+          </div>
+          <div style={{ textAlign: 'center', minWidth: 110 }}>
+            <div style={{ fontSize: '2rem', fontWeight: 800, letterSpacing: 2 }}>
+              {fixture.score.home ?? 0} <span className="muted">–</span> {fixture.score.away ?? 0}
+            </div>
+            <div className="tiny muted">
+              {fixture.status === 'SCHEDULED'
+                ? fmt.dateTime(fixture.kickoffUtc)
+                : fixture.minute
+                  ? `${fixture.minute}'`
+                  : 'encerrado'}
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>{fixture.away.name}</div>
+            <div className="tiny muted">Visitante</div>
+          </div>
         </div>
-        <div className="wrap" style={{ marginTop: 10 }}>
-          <span className="tiny muted">Dados: {fixture.dataSource ?? 'provedor'} · atualizado {fmt.relative(fixture.updatedAt)}</span>
-          {fixture.status === 'LIVE' || fixture.status === 'HT' ? (
-            <button type="button" className="btn sm" onClick={forceRefresh} disabled={refreshing}>
-              {refreshing ? 'Atualizando…' : 'Atualizar dados'}
-            </button>
-          ) : null}
+        <div className="tiny muted" style={{ marginTop: 12 }}>
+          Atualizado {fixture.updatedAt ? fmt.relative(fixture.updatedAt) : '—'}
+          <button type="button" className="btn ghost sm" style={{ marginLeft: 8 }} onClick={reload}>
+            Atualizar
+          </button>
         </div>
-        {refreshMsg ? <div className="tiny muted" style={{ marginTop: 6 }}>{refreshMsg}</div> : null}
       </Panel>
-
-      {blocked ? (
-        <div className="section">
-          <Alert tone="warn" title="Recomendações bloqueadas para esta partida">
-            {analysis.quality?.missing?.length ? (
-              <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
-                {analysis.quality.missing.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            ) : (
-              'Dados insuficientes ou desatualizados. Nenhuma entrada é sugerida.'
-            )}
-          </Alert>
-        </div>
-      ) : null}
-
-      <section className="section">
-        <SectionHead eyebrow="Modelo" title="Probabilidades estimadas" subtitle={`Versão do modelo: ${analysis.modelVersion}`} />
-        <div className="grid kpi">
-          <div className="kpi-card">
-            <div className="label">Gols esperados (casa)</div>
-            <div className="value">{fmt.num(analysis.lambdas?.home)}</div>
-            <div className="hint">λ Poisson</div>
-          </div>
-          <div className="kpi-card">
-            <div className="label">Gols esperados (fora)</div>
-            <div className="value">{fmt.num(analysis.lambdas?.away)}</div>
-            <div className="hint">λ Poisson</div>
-          </div>
-          <div className="kpi-card">
-            <div className="label">Escanteios esperados</div>
-            <div className="value">{fmt.num(analysis.lambdas?.cornersTotal, 1)}</div>
-            <div className="hint">binomial negativa</div>
-          </div>
-          <div className="kpi-card">
-            <div className="label">Amostra por equipe</div>
-            <div className="value">{analysis.quality?.sample ?? 0}</div>
-            <div className="hint">últimos jogos analisados</div>
-          </div>
-        </div>
-      </section>
 
       <section className="section">
         <SectionHead
-          eyebrow="Ao vivo" 
-          title="Estatísticas da partida"
-          subtitle={fixture.hasStats ? 'Dados reais do provedor' : 'O provedor ainda não enviou estatísticas para esta partida'}
+          eyebrow="O que apostar"
+          title="Recomendação desta partida"
+          subtitle="Probabilidade calculada pelo modelo, com fatores favoráveis e riscos reais do jogo."
         />
-        <Panel>
-          {fixture.hasStats ? (
-            <div className="stat-compare">
-              <StatCompare label="Escanteios" home={stats.corners?.home} away={stats.corners?.away} />
-              <StatCompare label="Finalizações" home={stats.shots?.home} away={stats.shots?.away} />
-              <StatCompare label="Finalizações no gol" home={stats.shotsOn?.home} away={stats.shotsOn?.away} />
-              <StatCompare label="Posse de bola" home={stats.possession?.home} away={stats.possession?.away} suffix="%" />
-              <StatCompare label="Cartões" home={stats.cards?.home} away={stats.cards?.away} />
-              <StatCompare label="Ataques perigosos" home={stats.dangerousAttacks?.home} away={stats.dangerousAttacks?.away} />
-            </div>
-          ) : (
-            <p className="small muted">
-              Sem estatísticas não há cálculo de escanteios, pressão ou ritmo. As recomendações ficam limitadas ou bloqueadas
-              em vez de usar números inventados.
-            </p>
-          )}
-          {analysis.live ? (
-            <div className="grid kpi" style={{ marginTop: 14 }}>
-              <Metric label="Minuto" value={`${analysis.live.minute ?? '—'}'`} />
-              <Metric label="Ritmo" value={fmt.num(analysis.live.tempoFactor)} />
-              <Metric label="Gols restantes (projeção)" value={fmt.num(analysis.live.projectedRemainingGoals)} />
-              <Metric label="Fonte do ritmo" value={analysis.live.tempoSource} />
-            </div>
-          ) : null}
-        </Panel>
+        {recommended.length ? (
+          <div className="stack">
+            {recommended.map((market, index) => (
+              <BetCard key={`${market.marketKey}-${market.selection}-${market.line}`} market={market} index={index} />
+            ))}
+          </div>
+        ) : (
+          <Alert tone="amber" title="SEM ENTRADA RECOMENDADA">
+            {analysis?.noEntryReasons?.length
+              ? analysis.noEntryReasons.join(' · ')
+              : 'Os dados deste jogo não sustentam uma aposta com vantagem estatística. Não vale arriscar aqui.'}
+          </Alert>
+        )}
       </section>
 
-      {analysis.h2h || analysis.injuries?.length || analysis.lineups ? (
+      {isLive ? (
         <section className="section">
-          <SectionHead eyebrow="Contexto" title="Confrontos, escalações e desfalques" />
-          <div className="grid two">
-            <Panel>
-              <h3>Histórico de confrontos</h3>
-              {analysis.h2h ? (
-                <p className="small muted" style={{ marginTop: 6 }}>
-                  {analysis.h2h.matches ?? analysis.h2h.count ?? 0} confronto(s) na amostra · média de gols{' '}
-                  {fmt.num(analysis.h2h.avgGoals ?? analysis.h2h.avgTotalGoals)} · ajuste aplicado{' '}
-                  {fmt.num(analysis.lambdas?.h2hAdjustment, 3)}
-                </p>
-              ) : (
-                <p className="small muted" style={{ marginTop: 6 }}>Sem histórico suficiente entre as equipes.</p>
-              )}
-            </Panel>
-            <Panel>
-              <h3>Escalações e desfalques</h3>
-              {analysis.lineups ? <p className="small muted" style={{ marginTop: 6 }}>Escalações disponíveis no provedor.</p> : null}
-              {analysis.injuries?.length ? (
-                <div className="list" style={{ marginTop: 8 }}>
-                  {analysis.injuries.slice(0, 8).map((injury, index) => (
-                    <div className="list-item risk" key={index}>
-                      <span className="bullet">!</span>
-                      <span className="small">{injuryText(injury)}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="small muted" style={{ marginTop: 6 }}>Provedor não informou desfalques para esta partida.</p>
-              )}
-            </Panel>
-          </div>
+          <SectionHead eyebrow="Ao vivo" title="Números da partida" subtitle="Atualizados durante o jogo." />
+          <Panel>
+            <div className="stack">
+              <StatCompare label="Escanteios" home={stats.corners?.home} away={stats.corners?.away} />
+              <StatCompare label="Finalizações" home={stats.shots?.home} away={stats.shots?.away} />
+              <StatCompare label="No gol" home={stats.shotsOn?.home} away={stats.shotsOn?.away} />
+              <StatCompare label="Posse de bola" home={stats.possession?.home} away={stats.possession?.away} suffix="%" />
+              <StatCompare label="Cartões" home={stats.cards?.home} away={stats.cards?.away} />
+              {Number.isFinite(stats.dangerousAttacks?.home) ? (
+                <StatCompare
+                  label="Ataques perigosos"
+                  home={stats.dangerousAttacks?.home}
+                  away={stats.dangerousAttacks?.away}
+                />
+              ) : null}
+            </div>
+            {!fixture.hasStats ? (
+              <p className="tiny muted" style={{ marginTop: 10 }}>
+                A transmissão dos números desta partida ainda não chegou. A recomendação fica bloqueada até os dados
+                atualizarem.
+              </p>
+            ) : null}
+          </Panel>
         </section>
       ) : null}
 
       <section className="section">
-        <SectionHead
-          eyebrow="Mercados"
-          title={recommended.length ? `${recommended.length} entrada(s) recomendada(s)` : 'Sem entrada recomendada'}
-          subtitle="Probabilidade, odd justa, odd de mercado, vantagem e confiança por mercado"
-        />
-        <div className="tabs" style={{ marginBottom: 12 }}>
-          {GROUP_TABS.map((item) => (
+        <SectionHead eyebrow="Projeção" title="O que a estatística espera" subtitle="Calculado sobre o histórico real das equipes." />
+        <Panel>
+          <div className="grid kpi">
+            <Metric label="Gols esperados (casa)" value={fmt.num(analysis?.lambdas?.home)} />
+            <Metric label="Gols esperados (fora)" value={fmt.num(analysis?.lambdas?.away)} />
+            <Metric label="Escanteios esperados" value={fmt.num(analysis?.lambdas?.cornersTotal, 1)} />
+            <Metric label="Base de dados" value={analysis?.quality?.sample ? `${analysis.quality.sample} jogo(s)` : '—'} />
+          </div>
+          {analysis?.quality?.missing?.length ? (
+            <p className="tiny muted" style={{ marginTop: 10 }}>
+              Falta para a análise ficar completa: {analysis.quality.missing.join(' · ')}.
+            </p>
+          ) : null}
+        </Panel>
+      </section>
+
+      <section className="section">
+        <SectionHead eyebrow="Mercados" title="Todos os mercados analisados" subtitle="Probabilidade e confiança de cada leitura." />
+        <div className="tabs">
+          {TABS.map((item) => (
             <button
               key={item}
               type="button"
               className={`tab ${tab === item ? 'active' : ''}`}
               onClick={() => setTab(item)}
             >
-              {item === 'TODOS' ? 'Todos' : GROUP_LABEL[item] ?? item}
+              {item === 'TODOS' ? 'Todos' : item === 'ESCANTEIO' ? 'Escanteios' : item === 'RESULTADO' ? 'Resultado' : 'Gols'}
             </button>
           ))}
         </div>
-        <div className="stack">
-          {markets.length ? (
-            markets.map((market) => <MarketRow key={market.marketKey} market={market} />)
-          ) : (
-            <Panel>
-              <p className="small muted">Nenhum mercado calculado para este filtro.</p>
-            </Panel>
-          )}
-        </div>
-        {!recommended.length && analysis.noEntryReasons?.length ? (
-          <div className="section">
-            <Alert tone="warn" title="Motivos para não recomendar">
-              <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
-                {analysis.noEntryReasons.map((reason, index) => (
-                  <li key={index}>{reason}</li>
-                ))}
-              </ul>
-            </Alert>
-          </div>
-        ) : null}
-      </section>
-
-      {analysis.recommended?.length ? (
-        <section className="section">
-          <SectionHead eyebrow="IA" title="Justificativas das entradas recomendadas" />
+        {filtered.length ? (
           <div className="stack">
-            {analysis.recommended.map((market) => (
-              <Panel key={market.marketKey}>
-                <div className="between" style={{ flexWrap: 'wrap', gap: 8 }}>
-                  <h3>{market.label}</h3>
-                  <div className="wrap">
-                    <ConfidenceChip value={market.confidence} />
-                    <Chip tone="green">Odd {fmt.odds(market.bookmakerOdds)}</Chip>
-                  </div>
-                </div>
-                <p className="small muted" style={{ marginTop: 8 }}>{market.rationale}</p>
-                <div className="grid two" style={{ marginTop: 10 }}>
-                  <div>
-                    <div className="eyebrow" style={{ marginBottom: 6 }}>Fatores favoráveis</div>
-                    <div className="list">
-                      {(market.factors ?? []).map((factor, index) => (
-                        <div className="list-item" key={index}>
-                          <span className="bullet">+</span>
-                          <span className="small">{factor}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="eyebrow" style={{ marginBottom: 6, color: 'var(--amber)' }}>Riscos</div>
-                    <div className="list">
-                      {(market.risks ?? []).map((risk, index) => (
-                        <div className="list-item risk" key={index}>
-                          <span className="bullet">!</span>
-                          <span className="small">{risk}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </Panel>
+            {filtered.map((market) => (
+              <MarketRow key={`${market.marketKey}-${market.selection}-${market.line}`} market={market} />
             ))}
           </div>
-        </section>
-      ) : null}
+        ) : (
+          <EmptyState title="Nenhum mercado nesta categoria">
+            Os mercados aparecem quando a partida tem dados suficientes para o cálculo.
+          </EmptyState>
+        )}
+      </section>
     </>
   );
 }

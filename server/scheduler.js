@@ -58,6 +58,36 @@ async function warmLiveHistories() {
   }
 }
 
+/**
+ * Aquece o histórico das equipes dos próximos jogos, algumas por ciclo.
+ * Sem isso as partidas agendadas ficam com amostra zero e nunca geram
+ * análise — é o que libera as recomendações pré-jogo aos poucos.
+ */
+async function warmUpcomingHistories() {
+  const { all } = await import('./db.js');
+  const from = nowIso();
+  const to = new Date(Date.now() + 48 * 3600 * 1000).toISOString();
+  const staleBefore = new Date(Date.now() - config.sync.historyIntervalMs).toISOString();
+  const teams = all(
+    `SELECT t.id, t.provider_id
+       FROM teams t
+      WHERE t.id IN (
+              SELECT home_team_id FROM fixtures
+               WHERE status = 'SCHEDULED' AND kickoff_utc BETWEEN ? AND ?
+              UNION
+              SELECT away_team_id FROM fixtures
+               WHERE status = 'SCHEDULED' AND kickoff_utc BETWEEN ? AND ?
+            )
+        AND (t.history_synced_at IS NULL OR t.history_synced_at < ?)
+      LIMIT 3`,
+    [from, to, from, to, staleBefore],
+  );
+  for (const team of teams) {
+    if (!team.provider_id) continue;
+    await guard('history-upcoming', () => syncTeamHistory(team.provider_id, { last: 10, budget: 5 }));
+  }
+}
+
 async function liveCycle() {
   const result = await guard('live', () => syncLive());
   schedulerState.lastLiveAt = nowIso();
@@ -66,6 +96,7 @@ async function liveCycle() {
   await guard('settlement', () => settlePendingRecommendations());
   schedulerState.lastSettlementAt = nowIso();
   await warmLiveHistories();
+  await warmUpcomingHistories();
 }
 
 async function scheduledCycle() {
@@ -88,11 +119,7 @@ export function startScheduler() {
     return schedulerState;
   }
   if (!provider.configured) {
-    logEvent(
-      'warn',
-      'scheduler',
-      'Sincronização automática em espera: configure FOOTBALL_API_KEY para buscar dados reais.',
-    );
+    logEvent('warn', 'scheduler', 'Sincronização automática em espera: a fonte de dados não está configurada.');
     return schedulerState;
   }
   if (schedulerState.running) return schedulerState;

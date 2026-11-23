@@ -208,8 +208,6 @@ export default function History({ navigate }) {
                   <div className="market-numbers" style={{ marginTop: 8 }}>
                     <div className="metric"><span>Mercado</span><b>{item.label}</b></div>
                     <div className="metric"><span>Prob.</span><b>{fmt.pct(item.probability)}</b></div>
-                    <div className="metric"><span>Odd</span><b>{fmt.odds(item.bookmakerOdds)}</b></div>
-                    <div className="metric"><span>Odd justa</span><b>{fmt.odds(item.fairOdds)}</b></div>
                     <div className="metric"><span>Confiança</span><b>{item.confidence}</b></div>
                     <div className="metric">
                       <span>Resultado</span>

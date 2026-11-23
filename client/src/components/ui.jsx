@@ -3,34 +3,36 @@ import { fmt, GROUP_LABEL, QUALITY_LABEL, STATUS_LABEL } from '../api.js';
 export function Chip({ tone = '', children, dot = false }) {
   return (
     <span className={`chip ${tone}`}>
-      {dot ? <span className={`dot ${tone === 'live' ? 'pulse' : ''}`} /> : null}
+      {dot ? <i className="dot" /> : null}
       {children}
     </span>
   );
 }
 
+const LIVE_STATUSES = new Set(['LIVE', 'HT']);
+
 export function StatusChip({ status, minute }) {
-  if (status === 'LIVE' || status === 'HT') {
-    return (
-      <Chip tone="live" dot>
-        {status === 'HT' ? 'INTERVALO' : `${minute ? `${minute}'` : 'AO VIVO'}`}
-      </Chip>
-    );
-  }
-  return <Chip tone={status === 'FINISHED' ? 'muted' : 'blue'}>{STATUS_LABEL[status] ?? status}</Chip>;
+  const tone = LIVE_STATUSES.has(status) ? 'live' : status === 'FINISHED' ? 'muted' : 'blue';
+  const label = STATUS_LABEL[status] ?? status;
+  return (
+    <Chip tone={tone} dot={LIVE_STATUSES.has(status)}>
+      {LIVE_STATUSES.has(status) && minute ? `${label} ${minute}'` : label}
+    </Chip>
+  );
 }
 
 export function ConfidenceChip({ value }) {
-  const tone = value === 'ALTA' ? 'green' : value === 'MODERADA' ? 'amber' : 'red';
-  return <Chip tone={tone}>{value ?? '—'}</Chip>;
+  const tone = value === 'ALTA' ? 'green' : value === 'MODERADA' ? 'amber' : value === 'BAIXA' ? 'red' : 'muted';
+  return <Chip tone={tone}>{value === 'ALTA' ? 'Confiança alta' : value === 'MODERADA' ? 'Confiança moderada' : value === 'BAIXA' ? 'Confiança baixa' : 'Sem confiança'}</Chip>;
 }
 
 export function QualityChip({ quality }) {
-  if (!quality) return null;
-  const tone = quality.level === 'OK' ? 'green' : quality.level === 'LIMITADA' ? 'amber' : 'red';
+  const level = quality?.level ?? 'INSUFICIENTE';
+  const tone = level === 'ALTA' ? 'green' : level === 'MEDIA' ? 'amber' : level === 'BAIXA' ? 'red' : 'muted';
   return (
-    <Chip tone={tone} dot>
-      {QUALITY_LABEL[quality.level] ?? quality.level}
+    <Chip tone={tone}>
+      Dados: {QUALITY_LABEL[level] ?? level}
+      {quality?.sample ? ` · ${quality.sample} jogo(s)` : ''}
     </Chip>
   );
 }
@@ -49,11 +51,11 @@ export function Panel({ children, className = '', ...rest }) {
 
 export function SectionHead({ eyebrow, title, subtitle, action }) {
   return (
-    <div className="section-head">
+    <div className="between" style={{ alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
       <div>
         {eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}
-        <h2>{title}</h2>
-        {subtitle ? <p>{subtitle}</p> : null}
+        <h2 style={{ marginTop: 4 }}>{title}</h2>
+        {subtitle ? <p className="small muted" style={{ marginTop: 6 }}>{subtitle}</p> : null}
       </div>
       {action}
     </div>
@@ -62,21 +64,21 @@ export function SectionHead({ eyebrow, title, subtitle, action }) {
 
 export function Kpi({ label, value, hint, tone }) {
   return (
-    <div className="kpi-card">
-      <div className="label">{label}</div>
-      <div className="value" style={tone ? { color: tone } : undefined}>
+    <Panel className="tight">
+      <div className="tiny muted">{label}</div>
+      <div className="kpi-value" style={tone ? { color: tone } : undefined}>
         {value}
       </div>
-      {hint ? <div className="hint">{hint}</div> : null}
-    </div>
+      {hint ? <div className="tiny muted">{hint}</div> : null}
+    </Panel>
   );
 }
 
 export function ProbBar({ probability }) {
-  const width = Math.max(0, Math.min(100, (probability ?? 0) * 100));
+  const pct = Math.max(0, Math.min(1, Number(probability) || 0)) * 100;
   return (
-    <div className="prob-bar" aria-hidden="true">
-      <i style={{ width: `${width}%` }} />
+    <div className="prob-bar" role="img" aria-label={`Probabilidade ${pct.toFixed(0)}%`}>
+      <span style={{ width: `${pct}%` }} />
     </div>
   );
 }
@@ -85,28 +87,25 @@ export function Metric({ label, value, tone }) {
   return (
     <div className="metric">
       <span>{label}</span>
-      <b className={tone ?? ''}>{value}</b>
+      <b style={tone ? { color: tone } : undefined}>{value}</b>
     </div>
   );
 }
 
 export function StatCompare({ label, home, away, suffix = '' }) {
-  const total = (Number(home) || 0) + (Number(away) || 0);
-  const homePct = total > 0 ? (Number(home) / total) * 100 : 50;
+  const hasHome = Number.isFinite(home);
+  const hasAway = Number.isFinite(away);
+  const total = (hasHome ? home : 0) + (hasAway ? away : 0);
+  const homeShare = total > 0 ? (home / total) * 100 : 50;
   return (
-    <div className="stat-line">
-      <div className="labels">
-        <span>
-          {Number.isFinite(home) ? `${home}${suffix}` : '—'}
-        </span>
-        <span className="muted tiny">{label}</span>
-        <span>
-          {Number.isFinite(away) ? `${away}${suffix}` : '—'}
-        </span>
+    <div className="stat-compare">
+      <div className="between tiny">
+        <b>{hasHome ? `${home}${suffix}` : '—'}</b>
+        <span className="muted">{label}</span>
+        <b>{hasAway ? `${away}${suffix}` : '—'}</b>
       </div>
-      <div className="track">
-        <i className="home" style={{ width: `${homePct}%` }} />
-        <i className="away" style={{ width: `${100 - homePct}%` }} />
+      <div className="duo-bar">
+        <span style={{ width: `${homeShare}%` }} />
       </div>
     </div>
   );
@@ -115,8 +114,8 @@ export function StatCompare({ label, home, away, suffix = '' }) {
 export function Alert({ tone = '', title, children }) {
   return (
     <div className={`alert ${tone}`}>
-      {title ? <h3>{title}</h3> : null}
-      <div className="small">{children}</div>
+      {title ? <b>{title}</b> : null}
+      {children ? <div className="small">{children}</div> : null}
     </div>
   );
 }
@@ -133,87 +132,83 @@ export function Loading({ rows = 3 }) {
 
 export function EmptyState({ title, children }) {
   return (
-    <div className="empty">
-      <strong>{title}</strong>
-      {children ? <div style={{ marginTop: 6 }}>{children}</div> : null}
-    </div>
+    <Panel className="empty">
+      <div style={{ fontWeight: 700 }}>{title}</div>
+      {children ? <p className="small muted" style={{ marginTop: 6 }}>{children}</p> : null}
+    </Panel>
   );
 }
 
 export function EdgeText({ edge }) {
-  if (!Number.isFinite(edge)) return <span className="muted">—</span>;
-  return <span style={{ color: edge > 0 ? 'var(--green)' : 'var(--red)' }}>{fmt.pct(edge, 1)}</span>;
+  if (!Number.isFinite(edge)) return null;
+  const pct = edge * 100;
+  const tone = pct > 0 ? 'var(--green)' : 'var(--red)';
+  return (
+    <span className="tiny" style={{ color: tone }}>
+      {pct > 0 ? '+' : ''}
+      {pct.toFixed(1)}% de vantagem
+    </span>
+  );
 }
 
+/**
+ * Um mercado analisado: probabilidade calculada, confiança, fatores
+ * favoráveis e riscos. Sem preço de mercado — apenas a leitura estatística.
+ */
 export function MarketRow({ market, showDetails = true }) {
-  const recommended = market.entry === 'RECOMENDADA';
-  const hasOdd = Number.isFinite(market.bookmakerOdds);
+  const suggested = market.entry && !String(market.entry).toUpperCase().includes('SEM');
+  const factors = Array.isArray(market.factors) ? market.factors : [];
+  const risks = Array.isArray(market.risks) ? market.risks : [];
   return (
-    <div className={`market-row ${recommended ? 'recommended' : ''} ${recommended ? '' : 'blocked'}`}>
-      <div style={{ minWidth: 0 }}>
-        <div className="market-label">
-          <span>{market.label}</span>
-          {recommended ? <Chip tone="green">RECOMENDADA</Chip> : <Chip tone="muted">SEM ENTRADA</Chip>}
-          {market.preferred ? <Chip tone="blue">FAIXA 1.50–1.80</Chip> : null}
-        </div>
-        <div className="market-numbers">
-          <Metric label="Probabilidade" value={fmt.pct(market.probability)} />
-          <Metric label="Odd justa" value={fmt.odds(market.fairOdds)} />
-          <Metric
-            label="Odd mercado"
-            value={hasOdd ? fmt.odds(market.bookmakerOdds) : 'sem odd'}
-            tone={hasOdd ? 'pos' : ''}
-          />
-          <Metric label="Vantagem" value={<EdgeText edge={market.edge} />} />
-          <Metric label="Confiança" value={market.confidence ?? '—'} />
-        </div>
-        <ProbBar probability={market.probability} />
-        {showDetails && recommended && market.rationale ? (
-          <details style={{ marginTop: 8 }}>
-            <summary className="small" style={{ cursor: 'pointer', color: 'var(--green)' }}>
-              Justificativa, fatores e riscos
-            </summary>
-            <div className="stack" style={{ marginTop: 8 }}>
-              <p className="small muted">{market.rationale}</p>
-              {market.factors?.length ? (
-                <div className="list">
-                  {market.factors.map((factor, index) => (
-                    <div className="list-item" key={`f-${index}`}>
-                      <span className="bullet">+</span>
-                      <span className="small">{factor}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-              {market.risks?.length ? (
-                <div className="list">
-                  {market.risks.map((risk, index) => (
-                    <div className="list-item risk" key={`r-${index}`}>
-                      <span className="bullet">!</span>
-                      <span className="small">{risk}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          </details>
-        ) : null}
-        {showDetails && !recommended && market.reason ? (
-          <div className="tiny muted" style={{ marginTop: 6 }}>
-            {market.reason}
+    <Panel className="tight market-row">
+      <div className="between" style={{ gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="wrap" style={{ gap: 6 }}>
+            <GroupChip group={market.group} />
+            {suggested ? <Chip tone="green">Aposta sugerida</Chip> : null}
           </div>
-        ) : null}
-      </div>
-      <div className="right">
-        {hasOdd ? (
-          <div style={{ fontSize: '1.2rem', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
-            {fmt.odds(market.bookmakerOdds)}
+          <div className="small" style={{ fontWeight: 700, marginTop: 6 }}>
+            {market.label}
           </div>
-        ) : (
-          <div className="tiny muted">sem odd</div>
-        )}
-        <div className="tiny muted">{market.group === 'ESCANTEIO' ? 'escanteios' : market.group === 'GOLS' ? 'gols' : 'resultado'}</div>
+        </div>
+        <div style={{ textAlign: 'right', minWidth: 130 }}>
+          <div className="wrap" style={{ justifyContent: 'flex-end', gap: 6 }}>
+            <ConfidenceChip value={market.confidence} />
+            <b>{fmt.pct(market.probability, 0)}</b>
+          </div>
+          <div style={{ marginTop: 6 }}>
+            <ProbBar probability={market.probability} />
+          </div>
+        </div>
       </div>
-    </div>
+
+      {showDetails && (factors.length || risks.length || market.rationale) ? (
+        <div style={{ marginTop: 10 }}>
+          {factors.length ? (
+            <ul className="factor-list">
+              {factors.map((factor) => (
+                <li key={factor} className="small">
+                  <span style={{ color: 'var(--green)' }}>+</span> {factor}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {risks.length ? (
+            <ul className="factor-list">
+              {risks.map((risk) => (
+                <li key={risk} className="small">
+                  <span style={{ color: 'var(--red)' }}>−</span> {risk}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {market.rationale ? (
+            <p className="tiny muted" style={{ marginTop: 8 }}>
+              {market.rationale}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </Panel>
   );
 }
