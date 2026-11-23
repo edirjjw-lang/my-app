@@ -992,6 +992,47 @@ select:focus {
   font-size: 1rem;
 }
 
+/* Escudo vetorial: a fonte de dados não fornece imagem, então o app desenha
+   o escudo e escreve as iniciais por cima. Se um logo real chegar, o <img>
+   do bloco acima assume o lugar automaticamente. */
+.team-badge.crest {
+  position: relative;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.crest-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.45));
+}
+
+.crest-text {
+  position: relative;
+  z-index: 1;
+  margin-top: 4px;
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  color: #04140d;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.team-badge.crest.sm .crest-text {
+  margin-top: 3px;
+  font-size: 0.48rem;
+}
+
+.team-badge.crest.lg .crest-text {
+  margin-top: 7px;
+  font-size: 0.98rem;
+}
+
 /* ---------- Match card (redesign) ---------- */
 .match-card {
   position: relative;
