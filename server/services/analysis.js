@@ -7,6 +7,8 @@ import { enrichFixture } from './ingest.js';
 
 const HISTORY_WINDOW = 20;
 const MAX_ANALYSES = 60;
+// Exibição completa: "limit=all" devolve todos os jogos coletados, de todas as ligas.
+const FIXTURE_LIST_CAP = Number(process.env.FIXTURE_LIST_CAP || 5000);
 
 export function teamHistoryRows(teamId, beforeIso, limit = HISTORY_WINDOW) {
   return all(
@@ -338,7 +340,8 @@ export function analyzeFixtures(rows, { persist = true } = {}) {
 }
 
 export function listFixtureRows({ status = 'LIVE', limit = 30, date = null } = {}) {
-  const cap = Math.min(Number(limit) || 30, MAX_ANALYSES);
+  const wantsAll = String(limit).toLowerCase() === 'all';
+  const cap = wantsAll ? FIXTURE_LIST_CAP : Math.min(Number(limit) || 30, FIXTURE_LIST_CAP);
   if (status === 'LIVE') {
     return all(
       "SELECT * FROM fixtures WHERE status IN ('LIVE', 'HT') ORDER BY kickoff_utc ASC LIMIT ?",

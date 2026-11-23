@@ -1,7 +1,7 @@
 import { config } from './config.js';
 import { logEvent, nowIso } from './db.js';
 import { getProvider } from './provider/index.js';
-import { syncDate, syncLive, syncRecentFinished, syncTeamHistory } from './services/ingest.js';
+import { syncDate, syncLive, syncRecentFinished, syncSchedule, syncTeamHistory } from './services/ingest.js';
 import { settlePendingRecommendations } from './services/history.js';
 
 export const schedulerState = {
@@ -12,6 +12,7 @@ export const schedulerState = {
   lastLiveAt: null,
   lastLiveResult: null,
   lastScheduledAt: null,
+  lastScheduledResult: null,
   lastHistoryAt: null,
   lastSettlementAt: null,
   lastError: null,
@@ -68,10 +69,9 @@ async function liveCycle() {
 }
 
 async function scheduledCycle() {
-  const today = new Date().toISOString().slice(0, 10);
-  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  await guard('scheduled-today', () => syncDate(today));
-  await guard('scheduled-tomorrow', () => syncDate(tomorrow));
+  // Janela completa: todos os jogos de todas as ligas em todos os dias configurados.
+  const result = await guard('scheduled', () => syncSchedule({ days: config.sync.scheduleDays }));
+  schedulerState.lastScheduledResult = result;
   schedulerState.lastScheduledAt = nowIso();
 }
 
