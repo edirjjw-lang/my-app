@@ -154,6 +154,74 @@ function groupMetrics(rows) {
   };
 }
 
+/**
+ * Lê JSON persistido sem deixar um registro corrompido derrubar a tela.
+ */
+function safeJson(value, fallback) {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Desempenho real do modelo, medido no backtest cronológico: cada partida é
+ * prevista usando apenas jogos anteriores a ela (sem vazamento de futuro).
+ * É o que dá sentido ao histórico: sem isto a aba só listaria recomendações
+ * em aberto e não provaria se as análises acertam.
+ */
+export function modelPerformance({ limit = 8 } = {}) {
+  const runs = all('SELECT * FROM backtest_runs ORDER BY id DESC LIMIT ?', [Math.min(Number(limit) || 8, 50)]);
+  if (!runs.length) {
+    return {
+      available: false,
+      reason:
+        'O backtest roda sozinho assim que houver partidas encerradas com histórico suficiente das equipes (mínimo de 20 jogos).',
+      runs: [],
+      latest: null,
+      byMarket: [],
+      calibration: [],
+    };
+  }
+
+  const latest = runs[0];
+  const perMarket = safeJson(latest.per_market, {});
+
+  return {
+    available: true,
+    latest: {
+      id: latest.id,
+      from: latest.from_date,
+      to: latest.to_date,
+      fixturesEvaluated: latest.fixtures_evaluated,
+      marketsEvaluated: latest.markets_evaluated,
+      hitRate: latest.hit_rate,
+      roi: latest.roi,
+      profit: latest.profit,
+      brier: latest.brier,
+      logLoss: latest.log_loss,
+      createdAt: latest.created_at,
+      durationMs: latest.duration_ms,
+    },
+    byMarket: (perMarket.groups ?? perMarket.markets ?? [])
+      .filter((row) => (row.markets ?? row.count ?? 0) > 0)
+      .slice(0, 14),
+    recommended: perMarket.recommended ?? null,
+    calibration: safeJson(latest.calibration, []),
+    runs: runs.map((row) => ({
+      id: row.id,
+      createdAt: row.created_at,
+      fixturesEvaluated: row.fixtures_evaluated,
+      hitRate: row.hit_rate,
+      roi: row.roi,
+      brier: row.brier,
+      logLoss: row.log_loss,
+    })),
+  };
+}
+
 export function historySummary({ group = null, status = null, limit = 200 } = {}) {
   const where = [];
   const params = [];
@@ -218,6 +286,7 @@ export function historySummary({ group = null, status = null, limit = 200 } = {}
     byGroup: marketBreakdown,
     byMarket: marketKeyBreakdown,
     calibration: calibrationBuckets(predictions),
+    model: modelPerformance(),
     recommendations: rows.slice(0, 100).map(serializeRecommendation),
     generatedAt: nowIso(),
   };
