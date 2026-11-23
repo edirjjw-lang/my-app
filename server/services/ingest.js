@@ -476,11 +476,24 @@ export async function syncTeamHistory(teamProviderId, { last = 10, force = false
 }
 
 export function deriveAllFinishedStats() {
-  const rows = all("SELECT * FROM fixtures WHERE status = 'FINISHED' ORDER BY kickoff_utc DESC LIMIT 500");
+  // O LIMIT 500 antigo deixava cada equipe com 1-2 jogos no histórico e o
+  // backtest descartava quase todas as partidas. Aqui derivamos de TODOS os
+  // jogos encerrados, em lotes, sem nenhuma requisição extra ao provedor.
+  const BATCH = 2000;
   let count = 0;
-  transaction(() => {
-    for (const row of rows) count += deriveTeamMatchStats(row);
-  });
+  let lastId = 0;
+  for (;;) {
+    const rows = all(
+      "SELECT * FROM fixtures WHERE status = 'FINISHED' AND id > ? ORDER BY id ASC LIMIT ?",
+      [lastId, BATCH],
+    );
+    if (!rows.length) break;
+    transaction(() => {
+      for (const row of rows) count += deriveTeamMatchStats(row);
+    });
+    lastId = rows[rows.length - 1].id;
+    if (rows.length < BATCH) break;
+  }
   return count;
 }
 
