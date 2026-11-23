@@ -3,7 +3,7 @@ import { all, get, logEvent, nowIso, run } from '../db.js';
 import { MODEL_VERSION, analyzeFixture } from '../analysis/engine.js';
 import { blendProfiles, buildProfile } from '../analysis/profile.js';
 import { getProvider } from '../provider/index.js';
-import { enrichFixture } from './ingest.js';
+import { enrichFixture, syncTeamHistory } from './ingest.js';
 
 const HISTORY_WINDOW = 20;
 const MAX_ANALYSES = 60;
@@ -221,6 +221,39 @@ export function persistRecommendations(fixtureRow, analysis) {
     count += 1;
   }
   return count;
+}
+
+/**
+ * Aquece o histórico real das duas equipes de um jogo sob demanda: quando a
+ * partida ainda não tem amostra, busca os jogos anteriores e as estatísticas
+ * na fonte antes de analisar. Orçamento limitado para não estourar a cota.
+ */
+export async function ensureFixtureHistory(fixtureRow, { statsBudget = 4, minSample = 5 } = {}) {
+  if (!fixtureRow) return 0;
+  let warmed = 0;
+  for (const teamId of [fixtureRow.home_team_id, fixtureRow.away_team_id]) {
+    if (!teamId) continue;
+    const team = get('SELECT id, provider_id, history_synced_at FROM teams WHERE id = ?', [teamId]);
+    if (!team?.provider_id) continue;
+    const sample =
+      get(
+        `SELECT COUNT(*) AS matches FROM team_match_stats tms
+           JOIN fixtures f ON f.provider_id = tms.fixture_provider_id
+          WHERE tms.team_id = ? AND f.status = 'FINISHED'`,
+        [teamId],
+      )?.matches ?? 0;
+    if (sample >= minSample) continue;
+    // Evita repetir a mesma busca em sequência quando a equipe realmente não tem dados.
+    const syncedAt = team.history_synced_at ? Date.parse(team.history_synced_at) : 0;
+    if (syncedAt && Date.now() - syncedAt < 10 * 60_000) continue;
+    try {
+      await syncTeamHistory(team.provider_id, { last: 10, budget: statsBudget, force: true });
+      warmed += 1;
+    } catch (error) {
+      logEvent('warn', 'history-on-demand', `Equipe ${team.provider_id}: ${error.message}`);
+    }
+  }
+  return warmed;
 }
 
 export function analyzeRow(fixtureRow, { persist = true } = {}) {
