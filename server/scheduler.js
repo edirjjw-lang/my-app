@@ -69,18 +69,15 @@ async function warmUpcomingHistories() {
   const to = new Date(Date.now() + 48 * 3600 * 1000).toISOString();
   const staleBefore = new Date(Date.now() - config.sync.historyIntervalMs).toISOString();
   const teams = all(
-    `SELECT t.id, t.provider_id
+    `SELECT t.id, t.provider_id, MIN(f.kickoff_utc) AS next_kickoff
        FROM teams t
-      WHERE t.id IN (
-              SELECT home_team_id FROM fixtures
-               WHERE status = 'SCHEDULED' AND kickoff_utc BETWEEN ? AND ?
-              UNION
-              SELECT away_team_id FROM fixtures
-               WHERE status = 'SCHEDULED' AND kickoff_utc BETWEEN ? AND ?
-            )
+       JOIN fixtures f ON f.home_team_id = t.id OR f.away_team_id = t.id
+      WHERE f.status = 'SCHEDULED' AND f.kickoff_utc BETWEEN ? AND ?
         AND (t.history_synced_at IS NULL OR t.history_synced_at < ?)
-      LIMIT 15`,
-    [from, to, from, to, staleBefore],
+      GROUP BY t.id
+      ORDER BY next_kickoff ASC
+      LIMIT 25`,
+    [from, to, staleBefore],
   );
   for (const team of teams) {
     if (!team.provider_id) continue;

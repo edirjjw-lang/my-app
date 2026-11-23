@@ -9,6 +9,7 @@ import {
   analyzeRow,
   collectOpportunities,
   countFixtures,
+  ensureFixtureHistory,
   getFixtureRow,
   listFixtureRows,
   refreshFixtureData,
@@ -252,6 +253,9 @@ apiRouter.get(
       }
     }
 
+    await ensureFixtureHistory(row);
+    row = getFixtureRow(req.params.id) ?? row;
+
     const analysis = analyzeRow(row, { persist: true });
     return res.json({
       fixture: serializeFixture(row),
@@ -263,17 +267,22 @@ apiRouter.get(
   }),
 );
 
-apiRouter.get('/fixtures/:id/analysis', (req, res) => {
-  const row = getFixtureRow(req.params.id);
-  if (!row) return res.status(404).json({ error: 'not_found', message: 'Partida não encontrada.' });
-  const analysis = analyzeRow(row, { persist: true });
-  return res.json({
-    fixture: serializeFixture(row),
-    analysis,
-    recommendations: fixtureRecommendations(row.id),
-    generatedAt: nowIso(),
-  });
-});
+apiRouter.get(
+  '/fixtures/:id/analysis',
+  asyncRoute(async (req, res) => {
+    let row = getFixtureRow(req.params.id);
+    if (!row) return res.status(404).json({ error: 'not_found', message: 'Partida não encontrada.' });
+    await ensureFixtureHistory(row);
+    row = getFixtureRow(req.params.id) ?? row;
+    const analysis = analyzeRow(row, { persist: true });
+    return res.json({
+      fixture: serializeFixture(row),
+      analysis,
+      recommendations: fixtureRecommendations(row.id),
+      generatedAt: nowIso(),
+    });
+  }),
+);
 
 apiRouter.get('/opportunities', (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 20, 60);
