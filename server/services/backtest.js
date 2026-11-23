@@ -244,6 +244,60 @@ export function runBacktest({ fromDate, toDate, maxFixtures = 120 } = {}) {
   };
 }
 
+/**
+ * Diagnóstico do backtest: mostra quantas partidas encerradas reais existem e
+ * em que etapa elas seriam descartadas. Serve para explicar honestamente por
+ * que o painel de validação está vazio, em vez de inventar números.
+ */
+export function backtestDiagnostics({ sample = 60 } = {}) {
+  const finished =
+    get(
+      "SELECT COUNT(*) AS n FROM fixtures WHERE status = 'FINISHED' AND home_goals IS NOT NULL AND away_goals IS NOT NULL",
+    )?.n ?? 0;
+  const statsRows = all('SELECT team_id, kickoff_utc FROM team_match_stats ORDER BY kickoff_utc DESC');
+  const byTeam = new Map();
+  for (const row of statsRows) {
+    if (!byTeam.has(row.team_id)) byTeam.set(row.team_id, []);
+    byTeam.get(row.team_id).push(row.kickoff_utc);
+  }
+  const distribution = { '5+': 0, '3-4': 0, '1-2': 0, '0': 0 };
+  for (const [, kickoffs] of byTeam) {
+    const n = kickoffs.length;
+    if (n >= 5) distribution['5+'] += 1;
+    else if (n >= 3) distribution['3-4'] += 1;
+    else if (n >= 1) distribution['1-2'] += 1;
+    else distribution['0'] += 1;
+  }
+
+  const fixtures = all(
+    `SELECT * FROM fixtures
+      WHERE status = 'FINISHED' AND home_goals IS NOT NULL AND away_goals IS NOT NULL
+      ORDER BY kickoff_utc DESC LIMIT ?`,
+    [Math.min(Math.max(Number(sample) || 60, 1), 200)],
+  );
+  let historyOk = 0;
+  let baselineOk = 0;
+  for (const fixture of fixtures) {
+    const home = (byTeam.get(fixture.home_team_id) ?? []).filter((k) => k < fixture.kickoff_utc).length;
+    const away = (byTeam.get(fixture.away_team_id) ?? []).filter((k) => k < fixture.kickoff_utc).length;
+    if (home >= MIN_HISTORY && away >= MIN_HISTORY) {
+      historyOk += 1;
+      if (computeBaseline(fixture.competition_id, fixture.kickoff_utc)) baselineOk += 1;
+    }
+  }
+
+  return {
+    finishedFixtures: finished,
+    statsRows: statsRows.length,
+    teamsWithHistory: byTeam.size,
+    historyPerTeam: distribution,
+    sampleChecked: fixtures.length,
+    sampleWithHistory: historyOk,
+    sampleWithHistoryAndBaseline: baselineOk,
+    minHistoryRequired: MIN_HISTORY,
+  };
+}
+
 export function listBacktestRuns(limit = 20) {
   const rows = all('SELECT * FROM backtest_runs ORDER BY id DESC LIMIT ?', [Math.min(Number(limit) || 20, 100)]);
   return rows.map((row) => ({
