@@ -376,12 +376,22 @@ export const bzzoiroProvider = {
     });
   },
 
-  async fetchFixtureStatistics(fixtureId) {
-    const { payload, stale, fetchedAt } = await call(`/events/${fixtureId}/statistics/`, {
+  async fetchFixtureStatistics(fixtureId, teams = {}) {
+    const { payload, stale, fetchedAt } = await call(`/events/${fixtureId}/stats/`, {
       cacheKey: `stats:${fixtureId}`,
       ttlMs: CACHE_TTL.statistics,
     });
-    return { statsByTeam: normalizeStatistics(payload), stale, fetchedAt };
+    // A API devolve { event_id, stats: { home: {...}, away: {...} } }.
+    // As chaves são trocadas pelos ids reais das equipes quando conhecidos.
+    const raw = normalizeStatistics(payload?.stats ?? payload);
+    const statsByTeam = {};
+    if (raw.home && teams.homeId) statsByTeam[String(teams.homeId)] = raw.home;
+    if (raw.away && teams.awayId) statsByTeam[String(teams.awayId)] = raw.away;
+    if (!Object.keys(statsByTeam).length) {
+      if (raw.home) statsByTeam.home = raw.home;
+      if (raw.away) statsByTeam.away = raw.away;
+    }
+    return { statsByTeam, stale, fetchedAt, raw };
   },
 
   async fetchFixtureEvents(fixtureId) {
