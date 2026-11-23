@@ -72,7 +72,7 @@ test('Lambdas usam força ofensiva/defensiva e respeitam a média da liga', () =
   assert.ok(lambdas.cornersHome > 0 && lambdas.cornersTotal > 0);
 });
 
-test('Sem odds reais o motor não recomenda nada (nunca inventa odd)', () => {
+test('Sem odd de mercado a indicação usa probabilidade e confiança (nunca inventa odd)', () => {
   const { homeProfile, awayProfile } = profiles();
   const analysis = analyzeFixture({
     fixture,
@@ -83,17 +83,34 @@ test('Sem odds reais o motor não recomenda nada (nunca inventa odd)', () => {
     odds: [],
     lineups: null,
     injuries: [],
-    filters: { minOdd: 1.5, preferredMinOdd: 1.5, preferredMaxOdd: 1.8, minEdge: 0.03, minConfidence: 'MODERADA' },
+    filters: {
+      minOdd: 1.5,
+      preferredMinOdd: 1.5,
+      preferredMaxOdd: 1.8,
+      minEdge: 0.03,
+      minConfidence: 'MODERADA',
+      minProbability: 0.6,
+    },
     freshness: { stale: false, ageMs: 1000 },
   });
   assert.ok(analysis.markets.length > 10);
-  assert.equal(analysis.recommended.length, 0);
-  assert.ok(analysis.noEntryReasons.some((reason) => /odd/i.test(reason)));
+  assert.ok(analysis.recommended.length > 0, 'com amostra suficiente deve existir indicação por probabilidade');
   for (const market of analysis.markets) {
-    assert.equal(market.entry, ENTRY.NO_ENTRY);
     assert.ok(market.probability >= 0 && market.probability <= 1);
     assert.ok(market.fairOdds === null || market.fairOdds >= 1);
+    // Nenhuma odd de mercado é inventada e nenhuma vantagem é alegada sem odds reais.
     assert.equal(market.bookmakerOdds, null);
+    assert.equal(market.edge, null);
+    if (market.entry === ENTRY.RECOMMENDED) {
+      assert.ok(market.probability >= 0.6, 'indicação exige probabilidade mínima');
+      assert.ok(['ALTA', 'MODERADA'].includes(market.confidence));
+    } else {
+      assert.ok(market.reason, 'mercado sem entrada precisa explicar o motivo');
+    }
+  }
+  for (const market of analysis.recommended) {
+    assert.equal(market.entry, ENTRY.RECOMMENDED);
+    assert.ok(market.probability >= 0.6);
   }
 });
 
