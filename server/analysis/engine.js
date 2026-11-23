@@ -2,9 +2,10 @@ import {
   clamp01,
   edgeOf,
   fairOdds,
+  dixonColesMatrix,
   liveOutcomeProbabilities,
+  matrixTailAbove,
   outcomeProbabilities,
-  scoreMatrix,
   tailAbove,
 } from './math.js';
 import { adjustForH2H, estimateLambdas, liveTempoFactor } from './profile.js';
@@ -21,6 +22,9 @@ import {
 
 export const MODEL_VERSION = 'poisson-nb-v1';
 const MAX_GOALS = 10;
+// Parâmetro de Dixon-Coles: corrige a dependência entre os gols das duas
+// equipes nos placares baixos (0-0, 1-0, 0-1, 1-1).
+const DC_RHO = -0.05;
 const GOAL_LINES = [0.5, 1.5, 2.5];
 const CORNER_LINES = [3.5, 4.5, 5.5, 6.5];
 
@@ -357,6 +361,10 @@ export function analyzeFixture({
     markets.push(market);
   };
 
+  // Matriz de placares com correção de Dixon-Coles, usada nos mercados de
+  // gols e de resultado para não subestimar empates de placar baixo.
+  const ftMatrix = isLive ? null : dixonColesMatrix(lambdas.home, lambdas.away, { maxGoals: MAX_GOALS, rho: DC_RHO });
+
   // ---------------- GOLS ----------------
   if (isLive) {
     const remGoals = lambdaHomeRemaining + lambdaAwayRemaining;
@@ -374,12 +382,12 @@ export function analyzeFixture({
     for (const line of GOAL_LINES) {
       add(
         { group: GROUPS.GOALS, marketType: 'over', period: 'FT', selection: 'over', line },
-        tailAbove(lambdas.total, line),
+        matrixTailAbove(ftMatrix, line),
       );
     }
     add(
       { group: GROUPS.GOALS, marketType: 'under', period: 'FT', selection: 'under', line: 2.5 },
-      1 - tailAbove(lambdas.total, 2.5),
+      1 - matrixTailAbove(ftMatrix, 2.5),
     );
   }
 
@@ -488,7 +496,7 @@ export function analyzeFixture({
   // ---------------- RESULTADOS ----------------
   const outcome = isLive
     ? liveOutcomeProbabilities(lambdaHomeRemaining, lambdaAwayRemaining, current.home, current.away)
-    : outcomeProbabilities(scoreMatrix(lambdas.home, lambdas.away, MAX_GOALS));
+    : outcomeProbabilities(ftMatrix);
 
   add({ group: GROUPS.RESULT, marketType: '1x2', selection: 'home', line: null }, outcome.home);
   add({ group: GROUPS.RESULT, marketType: '1x2', selection: 'draw', line: null }, outcome.draw);

@@ -138,6 +138,20 @@ export function blendProfiles(shortProfile, longProfile, shortWeight = 0.65) {
   return blended;
 }
 
+/**
+ * Perfil combinado de três janelas (5, 10 e 20 jogos). A janela curta captura
+ * a forma atual, a média reduz o ruído e a longa estabiliza a estimativa —
+ * é o mesmo cálculo usado na produção e no backtest, para que a validação
+ * meça exatamente o modelo que gera as recomendações.
+ */
+export function buildTeamProfileFromRows(rows) {
+  const short = buildProfile(rows, { window: 5 });
+  const mid = buildProfile(rows, { window: 10 });
+  const long = buildProfile(rows, { window: 20 });
+  // Pesos efetivos: 45% forma recente, 30% média, 25% histórico longo.
+  return blendProfiles(blendProfiles(short, mid, 0.6), long, 0.75);
+}
+
 function shrink(value, sampleSize, prior = 1, strength = SHRINK_MATCHES) {
   if (!Number.isFinite(value)) return prior;
   const n = Math.max(0, sampleSize);

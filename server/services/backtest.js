@@ -3,7 +3,7 @@ import { all, get, nowIso, run, transaction } from '../db.js';
 import { brierScore, calibrationBuckets, logLoss } from '../analysis/math.js';
 import { settleMarket } from '../analysis/markets.js';
 import { analyzeFixture } from '../analysis/engine.js';
-import { blendProfiles, buildProfile } from '../analysis/profile.js';
+import { buildTeamProfileFromRows } from '../analysis/profile.js';
 import { computeBaseline, computeH2H, parseStoredJson } from './analysis.js';
 
 const MAX_FIXTURES_PER_RUN = 200;
@@ -91,8 +91,8 @@ export function runBacktest({ fromDate, toDate, maxFixtures = 120 } = {}) {
       continue;
     }
 
-    const homeProfile = blendProfiles(buildProfile(homeRows, { window: 5 }), buildProfile(homeRows, { window: 10 }));
-    const awayProfile = blendProfiles(buildProfile(awayRows, { window: 5 }), buildProfile(awayRows, { window: 10 }));
+    const homeProfile = buildTeamProfileFromRows(homeRows);
+    const awayProfile = buildTeamProfileFromRows(awayRows);
     const h2h = computeH2H(fixture.home_team_id, fixture.away_team_id, before);
     const { odds } = parseStoredJson(fixture);
 

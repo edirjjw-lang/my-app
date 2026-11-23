@@ -1,7 +1,7 @@
 import { config } from '../config.js';
 import { all, get, logEvent, nowIso, run } from '../db.js';
 import { MODEL_VERSION, analyzeFixture } from '../analysis/engine.js';
-import { blendProfiles, buildProfile } from '../analysis/profile.js';
+import { blendProfiles, buildProfile, buildTeamProfileFromRows } from '../analysis/profile.js';
 import { getProvider } from '../provider/index.js';
 import { enrichFixture, syncTeamHistory } from './ingest.js';
 
@@ -23,9 +23,7 @@ export function teamHistoryRows(teamId, beforeIso, limit = HISTORY_WINDOW) {
 
 export function buildTeamProfile(teamId, beforeIso) {
   const rows = teamHistoryRows(teamId, beforeIso);
-  const short = buildProfile(rows, { window: 5 });
-  const long = buildProfile(rows, { window: 10 });
-  return blendProfiles(short, long);
+  return buildTeamProfileFromRows(rows);
 }
 
 function baselineQuery(competitionId, beforeIso) {
