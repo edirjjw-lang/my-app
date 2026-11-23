@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { fmt, GROUP_LABEL, useApi } from '../api.js';
 import {
   Alert,
@@ -48,6 +49,8 @@ function FixtureLine({ item, navigate }) {
                 Prob. {fmt.pct(best.probability)} · justa {fmt.odds(best.fairOdds)} · <EdgeText edge={best.edge} />
               </div>
             </>
+          ) : item.analysisPending ? (
+            <Chip tone="muted">Análise sob demanda</Chip>
           ) : (
             <Chip tone="muted">Sem entrada</Chip>
           )}
@@ -65,10 +68,61 @@ function FixtureLine({ item, navigate }) {
   );
 }
 
+function groupByLeague(items) {
+  const groups = new Map();
+  for (const item of items) {
+    const name = item.fixture.competition?.name ?? 'Outras ligas';
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push(item);
+  }
+  return [...groups.entries()]
+    .map(([name, groupItems]) => ({ name, items: groupItems }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+}
+
+/**
+ * Lista completa de jogos: todos aparecem, agrupados por liga. Listas grandes
+ * começam resumidas e o usuário expande — nenhum jogo é descartado.
+ */
+function FixtureList({ items, navigate }) {
+  const [showAll, setShowAll] = useState(false);
+  const previewLimit = 20;
+  const visible = showAll ? items : items.slice(0, previewLimit);
+  const groups = groupByLeague(visible);
+  const leagueCount = groupByLeague(items).length;
+
+  return (
+    <div className="stack">
+      {items.length > previewLimit ? (
+        <div className="between" style={{ flexWrap: 'wrap', gap: 8 }}>
+          <span className="tiny muted">
+            {items.length} jogos · {leagueCount} ligas
+          </span>
+          <button type="button" className="btn sm" onClick={() => setShowAll((value) => !value)}>
+            {showAll ? 'Mostrar menos' : `Mostrar todos os ${items.length} jogos`}
+          </button>
+        </div>
+      ) : null}
+      {groups.map((group) => (
+        <div key={group.name} className="stack">
+          <div className="between" style={{ marginTop: 4 }}>
+            <span className="small" style={{ fontWeight: 700 }}>{group.name}</span>
+            <span className="tiny muted">{group.items.length} jogo(s)</span>
+          </div>
+          {group.items.map((item) => (
+            <FixtureLine key={item.fixture.id} item={item} navigate={navigate} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Home({ navigate }) {
   const status = useApi('/status', { refreshMs: 60_000 });
-  const live = useApi('/fixtures?status=LIVE&limit=12', { refreshMs: 45_000 });
-  const upcoming = useApi('/fixtures?status=SCHEDULED&limit=10', { refreshMs: 120_000 });
+  // limit=all: todos os jogos coletados, de todas as ligas — nada é cortado.
+  const live = useApi('/fixtures?status=LIVE&limit=all', { refreshMs: 45_000 });
+  const upcoming = useApi('/fixtures?status=SCHEDULED&limit=all', { refreshMs: 120_000 });
   const opportunities = useApi('/opportunities?limit=12', { refreshMs: 45_000 });
   const history = useApi('/history?limit=1', { refreshMs: 120_000 });
 
@@ -119,7 +173,7 @@ export default function Home({ navigate }) {
 
       <section className="section">
         <div className="grid kpi">
-          <Kpi label="Jogos ao vivo" value={liveItems.length} hint={live.data?.count ? `${live.data.count} em análise` : 'sem jogos no momento'} />
+          <Kpi label="Jogos ao vivo" value={live.data?.total ?? liveItems.length} hint={live.data?.count ? `${live.data.count} em análise` : 'sem jogos no momento'} />
           <Kpi label="Oportunidades" value={opportunitiesList.length} hint="filtro de odd 1.50–1.80 e vantagem" />
           <Kpi label="Alta confiança" value={highConfidence.length} hint="somente dados completos" />
           <Kpi
@@ -145,11 +199,7 @@ export default function Home({ navigate }) {
         {live.loading && !live.data ? (
           <Loading rows={3} />
         ) : liveItems.length ? (
-          <div className="stack">
-            {liveItems.map((item) => (
-              <FixtureLine key={item.fixture.id} item={item} navigate={navigate} />
-            ))}
-          </div>
+          <FixtureList items={liveItems} navigate={navigate} />
         ) : (
           <EmptyState title="Nenhum jogo ao vivo agora">
             {live.data?.emptyReason ?? 'A sincronização automática atualiza esta lista a cada minuto.'}
@@ -210,11 +260,7 @@ export default function Home({ navigate }) {
         {upcoming.loading && !upcoming.data ? (
           <Loading rows={2} />
         ) : upcomingItems.length ? (
-          <div className="stack">
-            {upcomingItems.map((item) => (
-              <FixtureLine key={item.fixture.id} item={item} navigate={navigate} />
-            ))}
-          </div>
+          <FixtureList items={upcomingItems} navigate={navigate} />
         ) : (
           <EmptyState title="Sem jogos agendados">
             {upcoming.data?.emptyReason ?? 'A agenda é preenchida pela sincronização automática.'}

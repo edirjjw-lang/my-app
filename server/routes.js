@@ -28,6 +28,8 @@ import { schedulerState } from './scheduler.js';
 export const apiRouter = Router();
 
 const refreshThrottle = new Map();
+// Quantos jogos da lista recebem análise completa por requisição (o resto abre sob demanda).
+const ANALYSIS_LIMIT = Number(process.env.ANALYSIS_LIMIT || 120);
 
 function safeEqual(a, b) {
   const bufferA = Buffer.from(String(a));
