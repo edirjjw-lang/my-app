@@ -14,6 +14,7 @@ import {
   SectionHead,
   StatCompare,
   StatusChip,
+  TeamBadge,
 } from '../components/ui.jsx';
 
 const TABS = ['TODOS', 'GOLS', 'ESCANTEIO', 'RESULTADO'];
@@ -40,7 +41,7 @@ function BetCard({ market, index }) {
         </div>
         <div style={{ textAlign: 'right', minWidth: 140 }}>
           <div className="tiny muted">Probabilidade estimada</div>
-          <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--green)', lineHeight: 1.1 }}>
+          <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--green)', lineHeight: 1.1 }} className="bet-big-prob">
             {fmt.pct(market.probability, 0)}
           </div>
           <div style={{ marginTop: 6 }}>
@@ -139,16 +140,17 @@ export default function Match({ id, navigate }) {
           {fixture.competition?.name ? <span className="tiny muted">{fixture.competition.name}</span> : null}
           <QualityChip quality={analysis?.quality} />
         </div>
-        <div className="between" style={{ marginTop: 14, gap: 16, flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>{fixture.home.name}</div>
-            <div className="tiny muted">{isLive ? 'Mandante · ao vivo' : 'Mandante'}</div>
+        <div className="scoreboard">
+          <div className="sb-team">
+            <TeamBadge name={fixture.home.name} logo={fixture.home.logo} size="lg" />
+            <span className="sb-name">{fixture.home.name}</span>
+            <span className="sb-role">{isLive ? 'Mandante · ao vivo' : 'Mandante'}</span>
           </div>
-          <div style={{ textAlign: 'center', minWidth: 110 }}>
-            <div style={{ fontSize: '2rem', fontWeight: 800, letterSpacing: 2 }}>
-              {fixture.score.home ?? 0} <span className="muted">–</span> {fixture.score.away ?? 0}
+          <div className="sb-center">
+            <div className="sb-score">
+              {fixture.score.home ?? 0} <span>–</span> {fixture.score.away ?? 0}
             </div>
-            <div className="tiny muted">
+            <div className="sb-time">
               {fixture.status === 'SCHEDULED'
                 ? fmt.dateTime(fixture.kickoffUtc)
                 : fixture.minute
@@ -156,9 +158,10 @@ export default function Match({ id, navigate }) {
                   : 'encerrado'}
             </div>
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>{fixture.away.name}</div>
-            <div className="tiny muted">Visitante</div>
+          <div className="sb-team right">
+            <TeamBadge name={fixture.away.name} logo={fixture.away.logo} size="lg" />
+            <span className="sb-name">{fixture.away.name}</span>
+            <span className="sb-role">Visitante</span>
           </div>
         </div>
         <div className="tiny muted" style={{ marginTop: 12 }}>
