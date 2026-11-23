@@ -1,8 +1,9 @@
 import { config } from './config.js';
-import { logEvent, nowIso } from './db.js';
+import { get, logEvent, nowIso } from './db.js';
 import { getProvider } from './provider/index.js';
 import { syncDate, syncLive, syncRecentFinished, syncSchedule, syncTeamHistory } from './services/ingest.js';
 import { settlePendingRecommendations } from './services/history.js';
+import { runBacktest } from './services/backtest.js';
 
 export const schedulerState = {
   running: false,
@@ -15,6 +16,8 @@ export const schedulerState = {
   lastScheduledResult: null,
   lastHistoryAt: null,
   lastSettlementAt: null,
+  lastBacktestAt: null,
+  lastBacktestResult: null,
   lastError: null,
   cycles: 0,
 };
@@ -103,9 +106,40 @@ async function scheduledCycle() {
   schedulerState.lastScheduledAt = nowIso();
 }
 
+const BACKTEST_MIN_FINISHED = 20;
+const BACKTEST_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Valida o modelo contra partidas já encerradas (backtest cronológico: cada
+ * jogo é previsto só com dados anteriores a ele, sem vazamento de futuro) e
+ * grava o resultado no banco. É isso que faz o histórico provar algo: sem a
+ * validação, a aba só mostraria recomendações em aberto.
+ */
+async function modelValidationCycle() {
+  const finished =
+    get(
+      "SELECT COUNT(*) AS n FROM fixtures WHERE status = 'FINISHED' AND home_goals IS NOT NULL AND away_goals IS NOT NULL",
+    )?.n ?? 0;
+  if (finished < BACKTEST_MIN_FINISHED) return;
+
+  const last = get('SELECT created_at FROM backtest_runs ORDER BY id DESC LIMIT 1');
+  if (last?.created_at && Date.now() - Date.parse(last.created_at) < BACKTEST_INTERVAL_MS) return;
+
+  const result = await guard('backtest', () => runBacktest({ maxFixtures: 150 }));
+  schedulerState.lastBacktestAt = nowIso();
+  schedulerState.lastBacktestResult = result
+    ? {
+        runId: result.runId,
+        fixturesEvaluated: result.fixturesEvaluated,
+        markets: result.totals?.markets ?? 0,
+      }
+    : null;
+}
+
 async function historyCycle() {
   await guard('history-finished', () => syncRecentFinished());
   await warmUpcomingHistories();
+  await modelValidationCycle();
   schedulerState.lastHistoryAt = nowIso();
 }
 
