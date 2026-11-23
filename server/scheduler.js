@@ -19,6 +19,9 @@ export const schedulerState = {
   lastSettlementAt: null,
   lastBacktestAt: null,
   lastBacktestResult: null,
+  deepHistoryCursor: 0,
+  lastDeepHistoryAt: null,
+  lastDeepHistoryResult: null,
   lastError: null,
   cycles: 0,
 };
@@ -148,8 +151,30 @@ async function modelValidationCycle() {
     : null;
 }
 
+const DEEP_HISTORY_WINDOW_DAYS = 30;
+const DEEP_HISTORY_INTERVAL_MS = 5 * 60 * 1000;
+
+/**
+ * Histórico profundo: sem disco persistente o banco renasce a cada reinício e
+ * cada equipe ficaria com 1-2 jogos — foi isso que deixou o backtest em zero.
+ * Este ciclo puxa janelas antigas em lotes de 30 dias até completar
+ * config.sync.historyDays, sem travar o boot nem estourar o provedor.
+ */
+async function deepHistoryCycle() {
+  const target = Math.min(Math.max(1, config.sync.historyDays), 365);
+  const from = Number(schedulerState.deepHistoryCursor ?? 0);
+  if (from >= target) return;
+  const to = Math.min(from + DEEP_HISTORY_WINDOW_DAYS, target);
+  const result = await guard('history-deep', () => syncRecentFinished({ fromOffset: from, toOffset: to }));
+  if (!result) return;
+  schedulerState.deepHistoryCursor = to;
+  schedulerState.lastDeepHistoryAt = nowIso();
+  schedulerState.lastDeepHistoryResult = { from, to, fixtures: result.fixtures, stats: result.stats };
+}
+
 async function historyCycle() {
-  await guard('history-finished', () => syncRecentFinished());
+  // Ciclo curto mantém placares recentes frescos; o profundo vem em lotes.
+  await guard('history-finished', () => syncRecentFinished({ toOffset: 7 }));
   await warmUpcomingHistories();
   // Grava as recomendações do momento para o histórico acumular GREEN/RED
   // mesmo que ninguém abra a tela antes da partida terminar.
@@ -176,6 +201,7 @@ export function startScheduler() {
   const boot = async () => {
     await scheduledCycle();
     await historyCycle();
+    void deepHistoryCycle();
     await liveCycle();
   };
   boot();
@@ -183,6 +209,10 @@ export function startScheduler() {
   timers.push(setInterval(liveCycle, config.sync.liveIntervalMs));
   timers.push(setInterval(scheduledCycle, config.sync.scheduledIntervalMs));
   timers.push(setInterval(historyCycle, config.sync.historyIntervalMs));
+  timers.push(setInterval(deepHistoryCycle, DEEP_HISTORY_INTERVAL_MS));
+  // O backtest se refaz sozinho enquanto o histórico enche (e retenta cedo se
+  // a última rodada não avaliou nenhuma partida).
+  timers.push(setInterval(() => guard('backtest-check', modelValidationCycle), BACKTEST_RETRY_MS));
   logEvent('info', 'scheduler', 'Sincronização automática iniciada.');
   return schedulerState;
 }

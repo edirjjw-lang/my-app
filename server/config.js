@@ -41,7 +41,7 @@ export const config = {
     liveIntervalMs: num(process.env.LIVE_SYNC_INTERVAL_MS, 60_000),
     scheduledIntervalMs: num(process.env.SCHEDULED_SYNC_INTERVAL_MS, 15 * 60_000),
     historyIntervalMs: num(process.env.HISTORY_SYNC_INTERVAL_MS, 6 * 60 * 60_000),
-    historyDays: num(process.env.HISTORY_DAYS, 45),
+    historyDays: num(process.env.HISTORY_DAYS, 120),
     // Janela da agenda: todos os jogos de todas as ligas por N dias.
     scheduleDays: num(process.env.SCHEDULE_DAYS, 7),
   },
