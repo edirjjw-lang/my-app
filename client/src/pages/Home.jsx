@@ -10,6 +10,7 @@ import {
   ProbBar,
   SectionHead,
   StatusChip,
+  TeamBadge,
 } from '../components/ui.jsx';
 
 /** Estatísticas reais da partida em andamento (escanteios, finalizações, posse). */
@@ -50,68 +51,78 @@ function Projection({ lambdas }) {
 }
 
 function BetSummary({ item }) {
-  const { best } = item;
+  const { best, blocked } = item;
   if (!best) {
-    return <Chip tone="muted">{item.blocked ? 'Sem dados suficientes' : 'Sem entrada'}</Chip>;
+    return (
+      <div className="bet-empty">
+        <Chip tone="muted">{blocked ? 'Sem dados suficientes' : 'Sem entrada'}</Chip>
+      </div>
+    );
   }
   return (
-    <>
-      <div className="tiny muted">{GROUP_LABEL[best.group] ?? best.group}</div>
-      <div className="small" style={{ fontWeight: 700, marginTop: 2 }}>
-        {best.label}
-      </div>
-      <div className="wrap" style={{ justifyContent: 'flex-end', marginTop: 6 }}>
-        <ConfidenceChip value={best.confidence} />
-        <Chip tone="blue">{fmt.pct(best.probability, 0)}</Chip>
-      </div>
-      <div style={{ marginTop: 6 }}>
+    <div className="bet-strip">
+      <div className="bet-strip-main">
+        <span className="bet-eyebrow">{GROUP_LABEL[best.group] ?? best.group}</span>
+        <strong className="bet-label">{best.label}</strong>
         <ProbBar probability={best.probability} />
       </div>
-    </>
+      <div className="bet-strip-side">
+        <span className="bet-prob">{fmt.pct(best.probability, 0)}</span>
+        <ConfidenceChip value={best.confidence} />
+      </div>
+    </div>
   );
 }
 
 function FixtureLine({ item, navigate }) {
-  const { fixture, best, blocked, quality, lambdas, recommendedCount } = item;
+  const { fixture, quality, lambdas, recommendedCount, blocked } = item;
   const isLive = fixture.status === 'LIVE' || fixture.status === 'HT';
+  const scheduled = fixture.status === 'SCHEDULED';
   return (
-    <Panel className="fixture-card">
-      <div className="between" style={{ alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
-        <div style={{ minWidth: 0, flex: '1 1 220px' }}>
-          <div className="wrap" style={{ gap: 6 }}>
-            <StatusChip status={fixture.status} minute={fixture.minute} />
-            {fixture.competition?.name ? <span className="tiny muted">{fixture.competition.name}</span> : null}
-          </div>
-          <div style={{ marginTop: 8, fontWeight: 700, fontSize: '1.02rem' }}>
-            {fixture.home.name} <span className="muted">x</span> {fixture.away.name}
-          </div>
-          <div className="tiny muted" style={{ marginTop: 4 }}>
-            {fixture.status === 'SCHEDULED'
-              ? `Início ${fmt.dateTime(fixture.kickoffUtc)}`
-              : `${fixture.score.home ?? 0} – ${fixture.score.away ?? 0}${fixture.minute ? ` · ${fixture.minute}'` : ''}`}
-          </div>
-          {isLive ? <LiveStats fixture={fixture} /> : <Projection lambdas={lambdas} />}
-          {quality?.sample ? (
-            <div className="tiny muted" style={{ marginTop: 4 }}>
-              Base: {quality.sample} jogo(s) de cada equipe
-            </div>
-          ) : null}
+    <article className={`match-card ${isLive ? 'is-live' : ''}`}>
+      <div className="match-top">
+        <div className="match-top-left">
+          <StatusChip status={fixture.status} minute={fixture.minute} />
+          {fixture.competition?.name ? <span className="match-comp">{fixture.competition.name}</span> : null}
         </div>
-        <div style={{ textAlign: 'right', flex: '0 1 200px' }}>
-          <BetSummary item={item} />
-          <div style={{ marginTop: 8 }}>
-            <button type="button" className="btn sm" onClick={() => navigate(`/jogo/${fixture.id}`)}>
-              Ver análise
-            </button>
-          </div>
+        <span className="match-time">
+          {scheduled
+            ? fmt.dateTime(fixture.kickoffUtc)
+            : isLive && fixture.minute
+              ? `${fixture.minute}'`
+              : 'encerrado'}
+        </span>
+      </div>
+
+      <div className="teams">
+        <div className="team-row">
+          <TeamBadge name={fixture.home.name} logo={fixture.home.logo} />
+          <span className="team-name">{fixture.home.name}</span>
+          {scheduled ? <span className="team-tag">Casa</span> : <span className="team-score">{fixture.score.home ?? 0}</span>}
+        </div>
+        <div className="team-row">
+          <TeamBadge name={fixture.away.name} logo={fixture.away.logo} />
+          <span className="team-name">{fixture.away.name}</span>
+          {scheduled ? <span className="team-tag">Fora</span> : <span className="team-score">{fixture.score.away ?? 0}</span>}
         </div>
       </div>
-      {!blocked && recommendedCount > 1 ? (
-        <div className="tiny muted" style={{ marginTop: 8 }}>
-          {recommendedCount} apostas recomendadas nesta partida.
-        </div>
-      ) : null}
-    </Panel>
+
+      <div className="match-meta">
+        {isLive ? <LiveStats fixture={fixture} /> : <Projection lambdas={lambdas} />}
+        {quality?.sample ? <span className="tiny muted">Base: {quality.sample} jogo(s) de cada equipe</span> : null}
+      </div>
+
+      <BetSummary item={item} />
+
+      <div className="match-actions">
+        <button type="button" className="btn sm" onClick={() => navigate(`/jogo/${fixture.id}`)}>
+          Ver análise
+        </button>
+        {!blocked && recommendedCount > 1 ? (
+          <span className="tiny muted">{recommendedCount} apostas recomendadas nesta partida.</span>
+        ) : null}
+      </div>
+    </article>
   );
 }
 
@@ -262,35 +273,39 @@ export default function Home({ navigate }) {
           <Loading rows={2} />
         ) : opportunitiesList.length ? (
           <div className="stack">
-            {opportunitiesList.map((item) => (
-              <Panel key={`${item.fixture.id}-${item.market.marketKey}`} className="tight">
-                <div className="between" style={{ flexWrap: 'wrap', gap: 10 }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div className="wrap" style={{ gap: 6 }}>
-                      <StatusChip status={item.fixture.status} minute={item.fixture.minute} />
-                      <Chip tone="muted">{GROUP_LABEL[item.market.group] ?? item.market.group}</Chip>
-                    </div>
-                    <div className="small" style={{ fontWeight: 700, marginTop: 6 }}>
-                      {item.fixture.home.name} x {item.fixture.away.name}
-                    </div>
-                    <div className="tiny muted">{item.market.label}</div>
+            {opportunitiesList.map((item, index) => (
+              <article className="pick-card" key={`${item.fixture.id}-${item.market.marketKey}`}>
+                <div className="pick-head">
+                  <span className="pick-rank">{String(index + 1).padStart(2, '0')}</span>
+                  <StatusChip status={item.fixture.status} minute={item.fixture.minute} />
+                  <Chip tone="muted">{GROUP_LABEL[item.market.group] ?? item.market.group}</Chip>
+                </div>
+                <div className="pick-match">
+                  <div className="pick-team">
+                    <TeamBadge name={item.fixture.home.name} logo={item.fixture.home.logo} size="sm" />
+                    <span className="pick-name">{item.fixture.home.name}</span>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div className="wrap" style={{ justifyContent: 'flex-end' }}>
-                      <ConfidenceChip value={item.market.confidence} />
-                      <Chip tone="green">{fmt.pct(item.market.probability, 0)}</Chip>
-                    </div>
-                    <div style={{ marginTop: 6, width: 120, marginLeft: 'auto' }}>
-                      <ProbBar probability={item.market.probability} />
-                    </div>
-                    <div style={{ marginTop: 8 }}>
-                      <button type="button" className="btn sm" onClick={() => navigate(`/jogo/${item.fixture.id}`)}>
-                        Ver análise
-                      </button>
-                    </div>
+                  <span className="pick-x">x</span>
+                  <div className="pick-team right">
+                    <span className="pick-name">{item.fixture.away.name}</span>
+                    <TeamBadge name={item.fixture.away.name} logo={item.fixture.away.logo} size="sm" />
                   </div>
                 </div>
-              </Panel>
+                <div className="pick-market">{item.market.label}</div>
+                <div className="pick-foot">
+                  <div className="pick-prob-block">
+                    <span className="pick-prob">{fmt.pct(item.market.probability, 0)}</span>
+                    <span className="pick-prob-label">probabilidade</span>
+                  </div>
+                  <div className="pick-side">
+                    <ConfidenceChip value={item.market.confidence} />
+                    <button type="button" className="btn sm" onClick={() => navigate(`/jogo/${item.fixture.id}`)}>
+                      Ver análise
+                    </button>
+                  </div>
+                </div>
+                <ProbBar probability={item.market.probability} />
+              </article>
             ))}
           </div>
         ) : (
