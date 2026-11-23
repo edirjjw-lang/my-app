@@ -59,8 +59,9 @@ test('Brier Score e Log Loss conferem com valores conhecidos', () => {
     { probability: 0.7, outcome: 1 },
     { probability: 0.7, outcome: 0 },
   ];
-  assert.ok(Math.abs(brierScore(predictions) - 0.09) < 1e-12);
-  assert.ok(Math.abs(logLoss(predictions) - -Math.log(0.7)) < 1e-9);
+  assert.ok(Math.abs(brierScore(predictions) - 0.29) < 1e-12, 'média de (0.09, 0.49)');
+  const expectedLogLoss = (-Math.log(0.7) + -Math.log(0.3)) / 2;
+  assert.ok(Math.abs(logLoss(predictions) - expectedLogLoss) < 1e-9);
   assert.equal(brierScore([]), null);
   assert.equal(logLoss([]), null);
 });
@@ -75,7 +76,7 @@ test('Calibração agrupa previsões em faixas e expõe desvio', () => {
   const used = buckets.filter((bucket) => bucket.count > 0);
   assert.ok(used.length >= 2);
   for (const bucket of used) {
-    assert.ok(bucket.predicted >= 0 && bucket.predicted <= 1);
+    assert.ok(bucket.avgProbability >= 0 && bucket.avgProbability <= 1);
     assert.ok(bucket.observed >= 0 && bucket.observed <= 1);
   }
 });
