@@ -32,6 +32,8 @@ export const config = {
 
   requestTimeoutMs: num(process.env.API_TIMEOUT_MS, 12000),
   maxRequestsPerMinute: num(process.env.API_RATE_LIMIT_PER_MIN, 240),
+  // Teto de páginas seguidas por consulta paginada (todas as ligas, sem filtro).
+  maxPages: num(process.env.API_MAX_PAGES, 60),
   maxRetries: num(process.env.API_MAX_RETRIES, 2),
 
   sync: {
@@ -40,6 +42,8 @@ export const config = {
     scheduledIntervalMs: num(process.env.SCHEDULED_SYNC_INTERVAL_MS, 15 * 60_000),
     historyIntervalMs: num(process.env.HISTORY_SYNC_INTERVAL_MS, 6 * 60 * 60_000),
     historyDays: num(process.env.HISTORY_DAYS, 45),
+    // Janela da agenda: todos os jogos de todas as ligas por N dias.
+    scheduleDays: num(process.env.SCHEDULE_DAYS, 7),
   },
 
   freshness: {

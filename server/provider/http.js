@@ -18,6 +18,63 @@ export class ProviderError extends Error {
   }
 }
 
+/**
+ * Lê a paginação real do provedor (API-Football usa `paging.current/total`).
+ * Sem metadados, assume uma única página.
+ */
+export function pagingInfo(payload) {
+  const paging = payload?.paging ?? payload?.meta?.pagination ?? null;
+  const current = Number(paging?.current);
+  const total = Number(paging?.total);
+  return {
+    current: Number.isFinite(current) && current > 0 ? current : 1,
+    total: Number.isFinite(total) && total > 0 ? total : 1,
+  };
+}
+
+/**
+ * Percorre TODAS as páginas de uma consulta paginada. Nenhum item é descartado:
+ * se uma página falhar, as anteriores são mantidas e o resultado é marcado como
+ * parcial (nunca como completo).
+ */
+export async function collectPages(fetchPage, { maxPages = 50, startPage = 1 } = {}) {
+  const items = [];
+  const pages = [];
+  let page = startPage;
+  let totalPages = startPage;
+  let reportedTotal = startPage;
+  let partial = false;
+  let capped = false;
+  let error = null;
+
+  for (;;) {
+    let result;
+    try {
+      result = await fetchPage(page);
+    } catch (err) {
+      if (!pages.length) throw err;
+      partial = true;
+      error = err instanceof Error ? err.message : String(err);
+      break;
+    }
+    pages.push(page);
+    if (Array.isArray(result?.items)) items.push(...result.items);
+    const info = pagingInfo(result?.payload);
+    reportedTotal = Math.max(reportedTotal, info.total);
+    totalPages = Math.max(startPage, Math.min(info.total, startPage + maxPages - 1));
+    if (page >= totalPages) break;
+    page += 1;
+  }
+
+  if (reportedTotal > startPage + pages.length - 1) {
+    capped = true;
+    partial = true;
+    error = error ?? `Limite de ${maxPages} páginas por consulta (${reportedTotal} disponíveis).`;
+  }
+
+  return { items, pages, totalPages: reportedTotal, partial, capped, error };
+}
+
 async function acquireToken() {
   const ratePerMs = Math.max(1, config.maxRequestsPerMinute) / 60_000;
   for (let guard = 0; guard < 600; guard += 1) {
