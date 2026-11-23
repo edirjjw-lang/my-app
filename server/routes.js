@@ -22,7 +22,7 @@ import {
   settlePendingRecommendations,
 } from './services/history.js';
 import { getBacktestRun, listBacktestRuns, runBacktest } from './services/backtest.js';
-import { lastSyncRuns, syncDate, syncLive, syncRecentFinished, syncTeamHistory } from './services/ingest.js';
+import { lastSyncRuns, syncDate, syncLive, syncRecentFinished, syncSchedule, syncTeamHistory } from './services/ingest.js';
 import { schedulerState } from './scheduler.js';
 
 export const apiRouter = Router();
@@ -155,11 +155,15 @@ apiRouter.get('/fixtures', (req, res) => {
   if (!allowed.includes(status)) {
     return res.status(400).json({ error: 'invalid_status', allowed });
   }
-  const rows = listFixtureRows({ status, limit: req.query.limit, date: req.query.date });
-  const analyses = rows.length ? analyzeRowsSafe(rows) : [];
+  // "limit=all" devolve TODOS os jogos coletados (todas as ligas), não só a primeira página.
+  const rows = listFixtureRows({ status, limit: req.query.limit ?? 'all', date: req.query.date });
+  const analysisLimit = Math.min(Number(req.query.analyze) || ANALYSIS_LIMIT, rows.length);
+  const analyses = rows.length ? analyzeRowsSafe(rows, analysisLimit) : [];
   return res.json({
     status,
     count: analyses.length,
+    total: rows.length,
+    analyzed: Math.min(analysisLimit, rows.length),
     providerConfigured: getProvider().configured,
     emptyReason: analyses.length
       ? null
@@ -171,8 +175,22 @@ apiRouter.get('/fixtures', (req, res) => {
   });
 });
 
-function analyzeRowsSafe(rows) {
-  return rows.map((row) => {
+function analyzeRowsSafe(rows, analysisLimit = rows.length) {
+  return rows.map((row, index) => {
+    if (index >= analysisLimit) {
+      // Lista completa não corta jogos: os excedentes voltam prontos para abrir a análise.
+      return {
+        fixture: serializeFixture(row),
+        quality: null,
+        blocked: false,
+        analysisPending: true,
+        recommendedCount: 0,
+        best: null,
+        noEntryReasons: ['Análise sob demanda: abra a partida para calcular as probabilidades.'],
+        live: null,
+        lambdas: null,
+      };
+    }
     try {
       const analysis = analyzeRow(row, { persist: true });
       const best = analysis.recommended?.[0] ?? null;
@@ -316,14 +334,16 @@ apiRouter.post(
     let result;
     if (scope === 'live') result = await syncLive();
     else if (scope === 'history') result = await syncRecentFinished();
-    else if (scope === 'team') {
+    else if (scope === 'schedule' || scope === 'all') {
+      result = await syncSchedule({ days: config.sync.scheduleDays });
+    } else if (scope === 'team') {
       if (!req.body?.teamId) return res.status(400).json({ error: 'teamId_required' });
       result = await syncTeamHistory(String(req.body.teamId), { last: 10, force: true, budget: 8 });
     } else if (scope === 'date') {
       const date = String(req.body?.date || new Date().toISOString().slice(0, 10));
       result = await syncDate(date);
     } else {
-      return res.status(400).json({ error: 'invalid_scope', allowed: ['live', 'history', 'team', 'date'] });
+      return res.status(400).json({ error: 'invalid_scope', allowed: ['live', 'history', 'schedule', 'all', 'team', 'date'] });
     }
     return res.json({ scope, result, status: buildStatus() });
   }),
