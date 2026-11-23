@@ -1,10 +1,8 @@
 import { useState } from 'react';
 import { fmt, GROUP_LABEL, useApi } from '../api.js';
 import {
-  Alert,
   Chip,
   ConfidenceChip,
-  EdgeText,
   EmptyState,
   Kpi,
   Loading,
@@ -14,8 +12,68 @@ import {
   StatusChip,
 } from '../components/ui.jsx';
 
+/** Estatísticas reais da partida em andamento (escanteios, finalizações, posse). */
+function LiveStats({ fixture }) {
+  const stats = fixture.stats ?? {};
+  if (!fixture.hasStats) return null;
+  const parts = [];
+  if (stats.corners) parts.push(`Escanteios ${stats.corners.home ?? 0}–${stats.corners.away ?? 0}`);
+  if (stats.shots) parts.push(`Finalizações ${stats.shots.home ?? 0}–${stats.shots.away ?? 0}`);
+  if (stats.shotsOn) parts.push(`No gol ${stats.shotsOn.home ?? 0}–${stats.shotsOn.away ?? 0}`);
+  if (stats.possession) parts.push(`Posse ${stats.possession.home ?? 0}%–${stats.possession.away ?? 0}%`);
+  if (stats.cards) parts.push(`Cartões ${stats.cards.home ?? 0}–${stats.cards.away ?? 0}`);
+  if (!parts.length) return null;
+  return (
+    <div className="wrap" style={{ gap: 10, marginTop: 6 }}>
+      {parts.map((part) => (
+        <span className="tiny muted" key={part}>
+          {part}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** O que a estatística projeta para um jogo que ainda não começou. */
+function Projection({ lambdas }) {
+  if (!Number.isFinite(lambdas?.home) || !Number.isFinite(lambdas?.away)) return null;
+  return (
+    <div className="wrap" style={{ gap: 10, marginTop: 6 }}>
+      <span className="tiny muted">
+        Gols esperados {fmt.num(lambdas.home)} x {fmt.num(lambdas.away)}
+      </span>
+      {Number.isFinite(lambdas.cornersTotal) ? (
+        <span className="tiny muted">Escanteios esperados {fmt.num(lambdas.cornersTotal, 1)}</span>
+      ) : null}
+    </div>
+  );
+}
+
+function BetSummary({ item }) {
+  const { best } = item;
+  if (!best) {
+    return <Chip tone="muted">{item.blocked ? 'Sem dados suficientes' : 'Sem entrada'}</Chip>;
+  }
+  return (
+    <>
+      <div className="tiny muted">{GROUP_LABEL[best.group] ?? best.group}</div>
+      <div className="small" style={{ fontWeight: 700, marginTop: 2 }}>
+        {best.label}
+      </div>
+      <div className="wrap" style={{ justifyContent: 'flex-end', marginTop: 6 }}>
+        <ConfidenceChip value={best.confidence} />
+        <Chip tone="blue">{fmt.pct(best.probability, 0)}</Chip>
+      </div>
+      <div style={{ marginTop: 6 }}>
+        <ProbBar probability={best.probability} />
+      </div>
+    </>
+  );
+}
+
 function FixtureLine({ item, navigate }) {
-  const { fixture, best, recommendedCount, blocked, quality } = item;
+  const { fixture, best, blocked, quality, lambdas, recommendedCount } = item;
+  const isLive = fixture.status === 'LIVE' || fixture.status === 'HT';
   return (
     <Panel className="fixture-card">
       <div className="between" style={{ alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
@@ -31,38 +89,27 @@ function FixtureLine({ item, navigate }) {
             {fixture.status === 'SCHEDULED'
               ? `Início ${fmt.dateTime(fixture.kickoffUtc)}`
               : `${fixture.score.home ?? 0} – ${fixture.score.away ?? 0}${fixture.minute ? ` · ${fixture.minute}'` : ''}`}
-            {quality?.level ? ` · dados: ${quality.level.toLowerCase()}` : ''}
           </div>
+          {isLive ? <LiveStats fixture={fixture} /> : <Projection lambdas={lambdas} />}
+          {quality?.sample ? (
+            <div className="tiny muted" style={{ marginTop: 4 }}>
+              Base: {quality.sample} jogo(s) de cada equipe
+            </div>
+          ) : null}
         </div>
         <div style={{ textAlign: 'right', flex: '0 1 200px' }}>
-          {blocked ? (
-            <Chip tone="amber">Bloqueado</Chip>
-          ) : best ? (
-            <>
-              <div className="tiny muted">{GROUP_LABEL[best.group] ?? best.group}</div>
-              <div className="small" style={{ fontWeight: 700, marginTop: 2 }}>{best.label}</div>
-              <div className="wrap" style={{ justifyContent: 'flex-end', marginTop: 6 }}>
-                <ConfidenceChip value={best.confidence} />
-                <Chip tone="green">Odd {fmt.odds(best.bookmakerOdds)}</Chip>
-              </div>
-              <div className="tiny muted" style={{ marginTop: 6 }}>
-                Prob. {fmt.pct(best.probability)} · justa {fmt.odds(best.fairOdds)} · <EdgeText edge={best.edge} />
-              </div>
-            </>
-          ) : item.analysisPending ? (
-            <Chip tone="muted">Análise sob demanda</Chip>
-          ) : (
-            <Chip tone="muted">Sem entrada</Chip>
-          )}
+          <BetSummary item={item} />
           <div style={{ marginTop: 8 }}>
             <button type="button" className="btn sm" onClick={() => navigate(`/jogo/${fixture.id}`)}>
-              Analisar
+              Ver análise
             </button>
           </div>
         </div>
       </div>
       {!blocked && recommendedCount > 1 ? (
-        <div className="tiny muted" style={{ marginTop: 8 }}>{recommendedCount} entradas recomendadas nesta partida.</div>
+        <div className="tiny muted" style={{ marginTop: 8 }}>
+          {recommendedCount} apostas recomendadas nesta partida.
+        </div>
       ) : null}
     </Panel>
   );
@@ -99,14 +146,16 @@ function FixtureList({ items, navigate }) {
             {items.length} jogos · {leagueCount} ligas
           </span>
           <button type="button" className="btn sm" onClick={() => setShowAll((value) => !value)}>
-            {showAll ? 'Mostrar menos' : `Mostrar todos os ${items.length} jogos`}
+            {showAll ? 'Mostrar menos' : `Ver todos os ${items.length} jogos`}
           </button>
         </div>
       ) : null}
       {groups.map((group) => (
         <div key={group.name} className="stack">
           <div className="between" style={{ marginTop: 4 }}>
-            <span className="small" style={{ fontWeight: 700 }}>{group.name}</span>
+            <span className="small" style={{ fontWeight: 700 }}>
+              {group.name}
+            </span>
             <span className="tiny muted">{group.items.length} jogo(s)</span>
           </div>
           {group.items.map((item) => (
@@ -119,68 +168,57 @@ function FixtureList({ items, navigate }) {
 }
 
 export default function Home({ navigate }) {
-  const status = useApi('/status', { refreshMs: 60_000 });
   // limit=all: todos os jogos coletados, de todas as ligas — nada é cortado.
   const live = useApi('/fixtures?status=LIVE&limit=all', { refreshMs: 45_000 });
   const upcoming = useApi('/fixtures?status=SCHEDULED&limit=all', { refreshMs: 120_000 });
   const opportunities = useApi('/opportunities?limit=12', { refreshMs: 45_000 });
   const history = useApi('/history?limit=1', { refreshMs: 120_000 });
 
-  const provider = status.data?.provider;
-  const configured = provider?.configured;
-  const lastUpdate = live.data?.generatedAt ?? status.data?.app?.now;
+  const lastUpdate = live.data?.generatedAt;
   const opportunitiesList = opportunities.data?.opportunities ?? [];
   const liveItems = live.data?.items ?? [];
   const upcomingItems = upcoming.data?.items ?? [];
   const totals = history.data?.totals ?? {};
   const highConfidence = opportunitiesList.filter((item) => item.market?.confidence === 'ALTA');
+  const readyToBet = opportunitiesList.length;
 
   return (
     <>
       <Panel className="hero">
         <div className="between" style={{ flexWrap: 'wrap', gap: 12 }}>
           <div>
-            <div className="eyebrow">Análise estatística com modelos probabilísticos</div>
+            <div className="eyebrow">Análise estatística de futebol</div>
             <h1 style={{ marginTop: 8 }}>
-              Decisões com <span style={{ color: 'var(--green)' }}>probabilidade calculada</span>
+              Os jogos de hoje e <span style={{ color: 'var(--green)' }}>o que apostar</span>
             </h1>
             <p className="muted small" style={{ marginTop: 8, maxWidth: 620 }}>
-              Poisson para gols, binomial negativa para escanteios e avaliação de vantagem contra a odd real do mercado.
-              Sem dados suficientes, o app mostra <b>SEM ENTRADA RECOMENDADA</b> — nunca inventa probabilidades.
+              Cada jogo é analisado com o histórico real das duas equipes: gols, escanteios, finalizações, posse, casa e fora
+              e confrontos diretos. Quando os dados não bastam, o app mostra <b>SEM ENTRADA RECOMENDADA</b> em vez de
+              inventar palpite.
             </p>
           </div>
-          <div className="stack" style={{ minWidth: 200 }}>
-            <div className="wrap">
-              <Chip tone={configured ? 'green' : 'amber'} dot>
-                {configured ? `Provedor: ${provider?.label ?? 'conectado'}` : 'API não configurada'}
-              </Chip>
-              {status.data?.sync?.state?.enabled ? <Chip tone="green">Auto-sync ativo</Chip> : null}
+          <div className="stack" style={{ minWidth: 180 }}>
+            <div className="tiny muted">
+              Última atualização: {lastUpdate ? fmt.relative(lastUpdate) : '—'}
             </div>
-            <div className="tiny muted">Última atualização: {lastUpdate ? fmt.relative(lastUpdate) : '—'}</div>
           </div>
         </div>
       </Panel>
 
-      {!configured && status.data ? (
-        <div className="section">
-          <Alert tone="warn" title="Falta conectar sua API de futebol">
-            O sistema já está completo, mas sem a chave não há jogos reais para analisar. Adicione{' '}
-            <b>FOOTBALL_API_KEY</b> em Settings → Environment variables (a chave fica só no backend). Depois a sincronização
-            automática busca jogos ao vivo, estatísticas, odds, escalações e desfalques.
-          </Alert>
-        </div>
-      ) : null}
-
       <section className="section">
         <div className="grid kpi">
-          <Kpi label="Jogos ao vivo" value={live.data?.total ?? liveItems.length} hint={live.data?.count ? `${live.data.count} em análise` : 'sem jogos no momento'} />
-          <Kpi label="Oportunidades" value={opportunitiesList.length} hint="filtro de odd 1.50–1.80 e vantagem" />
-          <Kpi label="Alta confiança" value={highConfidence.length} hint="somente dados completos" />
+          <Kpi
+            label="Ao vivo agora"
+            value={liveItems.length}
+            hint={liveItems.length ? 'atualizando a cada minuto' : 'nenhum jogo em andamento'}
+          />
+          <Kpi label="Jogos para analisar" value={upcomingItems.length} hint="agenda completa, todas as ligas" />
+          <Kpi label="Apostas recomendadas" value={readyToBet} hint={`${highConfidence.length} de alta confiança`} />
           <Kpi
             label="Taxa de acerto"
             value={fmt.pct(totals.hitRate)}
-            hint={`ROI ${fmt.pct(totals.roi)} · ${totals.count ?? 0} liquidadas`}
-            tone={Number.isFinite(totals.roi) ? (totals.roi >= 0 ? 'var(--green)' : 'var(--red)') : undefined}
+            hint={`${totals.count ?? 0} análises já liquidadas`}
+            tone={Number.isFinite(totals.hitRate) ? (totals.hitRate >= 0.5 ? 'var(--green)' : 'var(--red)') : undefined}
           />
         </div>
       </section>
@@ -189,9 +227,16 @@ export default function Home({ navigate }) {
         <SectionHead
           eyebrow="Ao vivo"
           title="Jogos em andamento"
-          subtitle="Análises recalculadas com minuto, placar, escanteios, finalizações e pressão quando o provedor envia esses dados."
+          subtitle="Minuto, placar, escanteios, finalizações e posse recalculados durante a partida."
           action={
-            <button type="button" className="btn sm" onClick={() => { live.reload(); opportunities.reload(); }}>
+            <button
+              type="button"
+              className="btn sm"
+              onClick={() => {
+                live.reload();
+                opportunities.reload();
+              }}
+            >
               Atualizar
             </button>
           }
@@ -202,13 +247,17 @@ export default function Home({ navigate }) {
           <FixtureList items={liveItems} navigate={navigate} />
         ) : (
           <EmptyState title="Nenhum jogo ao vivo agora">
-            {live.data?.emptyReason ?? 'A sincronização automática atualiza esta lista a cada minuto.'}
+            A lista se preenche sozinha quando as partidas começarem.
           </EmptyState>
         )}
       </section>
 
       <section className="section">
-        <SectionHead eyebrow="Filtro de oportunidades" title="Entradas com vantagem estatística" subtitle="Odd mínima 1.50 · faixa preferencial 1.50 a 1.80 · descarta dados incompletos" />
+        <SectionHead
+          eyebrow="O que apostar"
+          title="Melhores entradas do momento"
+          subtitle="Probabilidade calculada e nível de confiança · sem dados completos, nenhuma entrada é sugerida"
+        />
         {opportunities.loading && !opportunities.data ? (
           <Loading rows={2} />
         ) : opportunitiesList.length ? (
@@ -220,7 +269,6 @@ export default function Home({ navigate }) {
                     <div className="wrap" style={{ gap: 6 }}>
                       <StatusChip status={item.fixture.status} minute={item.fixture.minute} />
                       <Chip tone="muted">{GROUP_LABEL[item.market.group] ?? item.market.group}</Chip>
-                      {item.market.preferred ? <Chip tone="green">Faixa preferencial</Chip> : null}
                     </div>
                     <div className="small" style={{ fontWeight: 700, marginTop: 6 }}>
                       {item.fixture.home.name} x {item.fixture.away.name}
@@ -230,12 +278,9 @@ export default function Home({ navigate }) {
                   <div style={{ textAlign: 'right' }}>
                     <div className="wrap" style={{ justifyContent: 'flex-end' }}>
                       <ConfidenceChip value={item.market.confidence} />
-                      <Chip tone="green">Odd {fmt.odds(item.market.bookmakerOdds)}</Chip>
+                      <Chip tone="green">{fmt.pct(item.market.probability, 0)}</Chip>
                     </div>
-                    <div className="tiny muted" style={{ marginTop: 6 }}>
-                      Prob. {fmt.pct(item.market.probability)} · justa {fmt.odds(item.market.fairOdds)} · <EdgeText edge={item.market.edge} />
-                    </div>
-                    <div style={{ marginTop: 6 }}>
+                    <div style={{ marginTop: 6, width: 120, marginLeft: 'auto' }}>
                       <ProbBar probability={item.market.probability} />
                     </div>
                     <div style={{ marginTop: 8 }}>
@@ -250,32 +295,58 @@ export default function Home({ navigate }) {
           </div>
         ) : (
           <EmptyState title="Sem entrada recomendada">
-            {opportunities.data?.emptyReason ?? 'Nenhuma oportunidade atende aos filtros neste momento.'}
+            Nenhum jogo reúne estatística suficiente para uma aposta com vantagem agora. Assim que as equipes tiverem
+            histórico coletado, as entradas aparecem aqui automaticamente.
           </EmptyState>
         )}
       </section>
 
       <section className="section">
-        <SectionHead eyebrow="Agenda" title="Próximos jogos" subtitle="Análise pré-jogo com histórico das equipes, casa/fora, H2H e desfalques." />
+        <SectionHead
+          eyebrow="Agenda"
+          title="Próximos jogos"
+          subtitle="Toque em qualquer partida para ver as estatísticas e a recomendação completa."
+        />
         {upcoming.loading && !upcoming.data ? (
           <Loading rows={2} />
         ) : upcomingItems.length ? (
           <FixtureList items={upcomingItems} navigate={navigate} />
         ) : (
-          <EmptyState title="Sem jogos agendados">
-            {upcoming.data?.emptyReason ?? 'A agenda é preenchida pela sincronização automática.'}
-          </EmptyState>
+          <EmptyState title="Sem jogos agendados">A agenda é atualizada automaticamente.</EmptyState>
         )}
       </section>
 
       <section className="section">
-        <SectionHead eyebrow="Transparência" title="Como o motor decide" />
+        <SectionHead eyebrow="Como analisamos" title="O que entra na conta" />
         <Panel>
           <div className="list">
-            <div className="list-item"><span className="bullet">1</span><span className="small">Perfil de cada equipe com últimos 5 e 10 jogos, peso maior para os mais recentes, casa/fora, gols, escanteios, finalizações e posse.</span></div>
-            <div className="list-item"><span className="bullet">2</span><span className="small">Força ofensiva e defensiva ajustadas pela média da liga e encolhidas para amostras pequenas.</span></div>
-            <div className="list-item"><span className="bullet">3</span><span className="small">Poisson bivariado para gols, binomial negativa para escanteios, com ajuste de H2H, primeiro/segundo tempo e ritmo ao vivo.</span></div>
-            <div className="list-item"><span className="bullet">4</span><span className="small">Probabilidade comparada à odd real: sem vantagem, sem entrada. Dados velhos ou incompletos bloqueiam a recomendação.</span></div>
+            <div className="list-item">
+              <span className="bullet">1</span>
+              <span className="small">
+                Últimos 5 e 10 jogos de cada equipe, com peso maior para os mais recentes, separando desempenho em casa e
+                fora.
+              </span>
+            </div>
+            <div className="list-item">
+              <span className="bullet">2</span>
+              <span className="small">
+                Gols marcados e sofridos, escanteios, finalizações e posse de bola, ajustados pela média da liga.
+              </span>
+            </div>
+            <div className="list-item">
+              <span className="bullet">3</span>
+              <span className="small">
+                Distribuição de Poisson para gols e modelo probabilístico para escanteios, com ajuste de primeiro e segundo
+                tempo e de confrontos diretos.
+              </span>
+            </div>
+            <div className="list-item">
+              <span className="bullet">4</span>
+              <span className="small">
+                Ao vivo, entram minuto, placar, escanteios, finalizações e ritmo da partida. Dados velhos ou incompletos
+                bloqueiam a recomendação.
+              </span>
+            </div>
           </div>
         </Panel>
       </section>
