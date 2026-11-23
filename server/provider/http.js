@@ -114,6 +114,7 @@ export function getProviderHealth() {
 export function readCache(cacheKey) {
   const row = get('SELECT payload, fetched_at FROM api_cache WHERE cache_key = ?', [cacheKey]);
   if (!row) return null;
+  run('UPDATE api_cache SET hits = hits + 1 WHERE cache_key = ?', [cacheKey]);
   try {
     return {
       payload: JSON.parse(row.payload),

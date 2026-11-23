@@ -58,7 +58,7 @@ function asyncRoute(handler) {
 }
 
 function cacheStats() {
-  const row = get('SELECT COUNT(*) AS entries, SUM(hits) AS hits, MAX(fetched_at) AS lastFetch FROM api_cache');
+  const row = get('SELECT COUNT(*) AS entries, COALESCE(SUM(hits), 0) AS hits, MAX(fetched_at) AS lastFetch FROM api_cache');
   return { entries: row?.entries ?? 0, hits: row?.hits ?? 0, lastFetch: row?.lastFetch ?? null };
 }
 

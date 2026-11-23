@@ -130,7 +130,8 @@ CREATE TABLE IF NOT EXISTS api_cache (
   cache_key TEXT PRIMARY KEY,
   payload TEXT NOT NULL,
   fetched_at TEXT NOT NULL,
-  ttl_seconds INTEGER NOT NULL
+  ttl_seconds INTEGER NOT NULL,
+  hits INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS provider_health (
@@ -214,6 +215,12 @@ export function getDb() {
   handle.exec('PRAGMA foreign_keys = ON');
   handle.exec('PRAGMA busy_timeout = 5000');
   handle.exec(SCHEMA);
+  // Migração leve para bancos criados antes da coluna de estatísticas de cache.
+  try {
+    handle.exec('ALTER TABLE api_cache ADD COLUMN hits INTEGER NOT NULL DEFAULT 0');
+  } catch {
+    /* coluna já existe */
+  }
   return handle;
 }
 
