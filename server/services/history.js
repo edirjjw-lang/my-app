@@ -188,6 +188,10 @@ export function modelPerformance({ limit = 8 } = {}) {
 
   const latest = runs[0];
   const perMarket = safeJson(latest.per_market, {});
+  const rawGroups = perMarket.groups ?? perMarket.markets ?? [];
+  const groupList = Array.isArray(rawGroups)
+    ? rawGroups
+    : Object.entries(rawGroups).map(([group, metrics]) => ({ group, ...(metrics ?? {}) }));
 
   return {
     available: true,
@@ -205,9 +209,19 @@ export function modelPerformance({ limit = 8 } = {}) {
       createdAt: latest.created_at,
       durationMs: latest.duration_ms,
     },
-    byMarket: (perMarket.groups ?? perMarket.markets ?? [])
+    byMarket: groupList
       .filter((row) => (row.markets ?? row.count ?? 0) > 0)
-      .slice(0, 14),
+      .slice(0, 14)
+      .map((row) => ({
+        group: row.group ?? row.label ?? null,
+        markets: row.markets ?? row.count ?? 0,
+        wins: row.wins ?? row.correct ?? null,
+        hitRate: row.hitRate ?? null,
+        roi: row.roi ?? null,
+        profit: row.profit ?? null,
+        brier: row.brier ?? null,
+        logLoss: row.logLoss ?? null,
+      })),
     recommended: perMarket.recommended ?? null,
     calibration: safeJson(latest.calibration, []),
     runs: runs.map((row) => ({

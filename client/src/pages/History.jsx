@@ -22,6 +22,8 @@ export default function History({ navigate }) {
 
   const totals = data?.totals ?? {};
   const hasDecided = (totals.count ?? 0) > 0;
+  const model = data?.model ?? null;
+  const modelReady = Boolean(model?.available);
 
   return (
     <>
@@ -44,6 +46,84 @@ export default function History({ navigate }) {
           <Kpi label="Brier Score" value={fmt.num(totals.brier, 4)} hint={`Log Loss ${fmt.num(totals.logLoss, 4)}`} />
         </div>
       </div>
+
+      <section className="section">
+        <SectionHead
+          eyebrow="Módulo 2 · Validação"
+          title="O modelo acerta? Medido em jogos encerrados"
+          subtitle="Backtest cronológico: cada partida é prevista usando apenas jogos anteriores a ela, sem vazamento de dados futuros. Nenhum resultado negativo é escondido."
+        />
+        {modelReady ? (
+          <>
+            <div className="grid kpi">
+              <Kpi
+                label="Jogos avaliados"
+                value={model.latest.fixturesEvaluated ?? 0}
+                hint={`${model.latest.marketsEvaluated ?? 0} previsões liquidadas`}
+              />
+              <Kpi
+                label="Taxa de acerto"
+                value={fmt.pct(model.latest.hitRate)}
+                hint="todas as previsões do backtest"
+              />
+              <Kpi
+                label="ROI (entradas recomendadas)"
+                value={fmt.pct(model.latest.roi)}
+                hint={`${fmt.money(model.latest.profit)} teóricos`}
+                tone={Number.isFinite(model.latest.roi) ? (model.latest.roi >= 0 ? 'var(--green)' : 'var(--red)') : undefined}
+              />
+              <Kpi
+                label="Brier Score"
+                value={fmt.num(model.latest.brier, 4)}
+                hint={`Log Loss ${fmt.num(model.latest.logLoss, 4)}`}
+              />
+            </div>
+            {model.byMarket?.length ? (
+              <Panel className="tight" style={{ marginTop: 12 }}>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Mercado</th>
+                        <th>Previsões</th>
+                        <th>Acerto</th>
+                        <th>ROI</th>
+                        <th>Brier</th>
+                        <th>Log Loss</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {model.byMarket.map((row) => (
+                        <tr key={row.group ?? Math.random()}>
+                          <td>
+                            <Chip>{GROUP_LABEL[row.group] ?? row.group ?? 'Geral'}</Chip>
+                          </td>
+                          <td>{row.markets}</td>
+                          <td>{fmt.pct(row.hitRate)}</td>
+                          <td style={{ color: Number(row.roi) >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                            {fmt.pct(row.roi)}
+                          </td>
+                          <td>{fmt.num(row.brier, 4)}</td>
+                          <td>{fmt.num(row.logLoss, 4)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Panel>
+            ) : null}
+            <p className="muted small" style={{ marginTop: 10 }}>
+              Validação de {model.latest.createdAt ? new Date(model.latest.createdAt).toLocaleString('pt-BR') : '—'}
+              {model.latest.from && model.latest.to ? ` · partidas de ${model.latest.from} a ${model.latest.to}` : ''}.
+            </p>
+          </>
+        ) : (
+          <Alert tone="warn" title="Validação ainda não executada">
+            {model?.reason ??
+              'O sistema executa o backtest automaticamente assim que houver partidas encerradas com histórico suficiente das equipes.'}
+          </Alert>
+        )}
+      </section>
 
       {!hasDecided ? (
         <div className="section">
