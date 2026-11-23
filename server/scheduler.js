@@ -146,6 +146,8 @@ async function modelValidationCycle() {
     ? {
         runId: result.runId,
         fixturesEvaluated: result.fixturesEvaluated,
+        fixturesSkipped: result.fixturesSkipped ?? 0,
+        skipReasons: result.skipReasons ?? null,
         markets: result.totals?.markets ?? 0,
       }
     : null;
